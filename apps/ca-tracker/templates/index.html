@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import social_links, change_pct %}
-{% block title %}All CA ? CA Tracker{% endblock %}
+{% block title %}所有 CA · CA Tracker{% endblock %}
 
 {% macro logo(image_url, symbol, name, size='sm') -%}
   {% set seed = (symbol or name or '?')[:1]|upper %}
@@ -39,26 +39,26 @@
 {% block content %}
 <section class="toolbar">
   <form method="get" action="{{ prefix or '/' }}" class="filters auto-filter">
-    <input type="search" name="q" value="{{ q }}" placeholder="Search address/name/symbol" autocomplete="off">
-    <select name="view" aria-label="View mode">
-      <option value="list" {% if view != 'columns' %}selected{% endif %}>List</option>
-      <option value="columns" {% if view == 'columns' %}selected{% endif %}>Tag Columns</option>
+    <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号" autocomplete="off">
+    <select name="view" aria-label="视图模式">
+      <option value="list" {% if view != 'columns' %}selected{% endif %}>列表</option>
+      <option value="columns" {% if view == 'columns' %}selected{% endif %}>按标签分栏</option>
     </select>
-    <select name="chain" aria-label="Chain filter">
-      <option value="">All Chains</option>
+    <select name="chain" aria-label="链筛选">
+      <option value="">所有链</option>
       {% for c in chains %}
         <option value="{{ c }}" {% if c == chain %}selected{% endif %}>{{ c }}</option>
       {% endfor %}
     </select>
-    <select name="tag_id" aria-label="Tag filter">
-      <option value="">All Tags</option>
+    <select name="tag_id" aria-label="标签筛选">
+      <option value="">所有标签</option>
       {% for t in tags %}
         <option value="{{ t.id }}" {% if tag_id == t.id %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
     </select>
-    <a href="{{ prefix or '/' }}" class="btn-ghost">Reset</a>
+    <a href="{{ prefix or '/' }}" class="btn-ghost">重置</a>
     {% if view == 'columns' %}
-    <div class="column-picker" aria-label="Choose tag columns">
+    <div class="column-picker" aria-label="选择展示标签">
       {% for t in tags %}
       <label class="tag-check compact" style="--tag-color: {{ t.color or '#0ea5e9' }}">
         <input type="checkbox" name="columns" value="{{ t.id }}" {% if t.id in selected_column_ids %}checked{% endif %}> {{ t.name }}
@@ -67,7 +67,7 @@
     </div>
     {% endif %}
   </form>
-  <span class="toolbar-status">Auto updating</span>
+  <span class="toolbar-status">自动更新中</span>
 </section>
 
 {% if view == 'columns' %}
@@ -89,7 +89,7 @@
             <span class="token-cell-meta">
               <span class="chain-badge">{{ t.chain }}</span>
               <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
-              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="Copy address" aria-label="Copy address">
+              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
                 <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
               </button>
             </span>
@@ -102,25 +102,25 @@
         </div>
       </article>
       {% else %}
-      <p class="empty">Copy addressCopy address CA</p>
+      <p class="empty">复制地址复制地址 CA</p>
       {% endfor %}
     </div>
   </section>
   {% else %}
-  <p class="empty">Copy addressCopy addressCopy addressCopy addressCopy addressCopy address</p>
+  <p class="empty">复制地址复制地址复制地址复制地址复制地址复制地址</p>
   {% endfor %}
 </section>
 {% else %}
 <table class="tokens dense">
   <thead>
     <tr>
-      <th class="col-token">Tags</th>
-      <th class="num">Tags</th>
-      <th class="num">MC / FDV / Tags</th>
-      <th class="num">Tags</th>
+      <th class="col-token">标签</th>
+      <th class="num">标签</th>
+      <th class="num">MC / FDV / 标签</th>
+      <th class="num">标签</th>
       <th class="num">1h</th>
       <th class="num">24h</th>
-      <th>Tags</th>
+      <th>标签</th>
     </tr>
   </thead>
   <tbody>
@@ -137,7 +137,7 @@
             <span class="token-cell-meta">
               <span class="chain-badge">{{ t.chain }}</span>
               <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
-              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="Copy address" aria-label="Copy address">
+              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
                 <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
               </button>
             </span>
@@ -170,7 +170,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="empty">Tags? CA?<a href="{{ prefix }}/new">Copy address?</a>?</td></tr>
+    <tr><td colspan="7" class="empty">标签? CA?<a href="{{ prefix }}/new">复制地址?</a>?</td></tr>
     {% endfor %}
   </tbody>
 </table>
