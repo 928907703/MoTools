@@ -65,6 +65,31 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro column_pager(pagination) -%}
+  {% if pagination.total_pages > 1 %}
+  <nav class="pagination column-pagination" aria-label="标签分页">
+    <span class="page-summary">第 {{ pagination.start }}-{{ pagination.end }} 条，共 {{ pagination.total }} 条</span>
+    <div class="page-links">
+      {% if pagination.has_prev %}
+        <a href="{{ pagination.prev_url }}" class="page-link">上一页</a>
+      {% endif %}
+      {% for p in pagination.pages %}
+        {% if p.current %}
+          <span class="page-link current">{{ p.num }}</span>
+        {% else %}
+          <a href="{{ p.url }}" class="page-link">{{ p.num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if pagination.has_next %}
+        <a href="{{ pagination.next_url }}" class="page-link">下一页</a>
+      {% endif %}
+    </div>
+  </nav>
+  {% else %}
+  <div class="pagination column-pagination single"><span class="page-summary">共 {{ pagination.total }} 条</span></div>
+  {% endif %}
+{%- endmacro %}
+
 {% block content %}
 <section class="toolbar">
   <form method="get" action="{{ prefix or '/' }}" class="filters auto-filter">
@@ -111,7 +136,7 @@
   <section class="tag-column">
     <header class="tag-column-head">
       <span class="tag" style="--tag-color: {{ group.tag.color or '#0ea5e9' }}">{{ group.tag.name }}</span>
-      <span class="muted">{{ group.tokens|length }}/{{ group.total }}</span>
+      <span class="muted">第 {{ group.pagination.start }}-{{ group.pagination.end }} 条 / {{ group.total }}</span>
     </header>
     <div class="tag-column-list">
       {% for t in group.tokens %}
@@ -140,12 +165,12 @@
       <p class="empty">当前页暂无 CA</p>
       {% endfor %}
     </div>
+    {{ column_pager(group.pagination) }}
   </section>
   {% else %}
   <p class="empty">暂无可展示的标签分栏</p>
   {% endfor %}
 </section>
-{{ pager(pagination) }}
 {% else %}
 <table class="tokens dense">
   <thead>

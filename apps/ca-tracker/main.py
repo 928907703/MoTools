@@ -310,29 +310,12 @@ async def index(
         selected_column_set = set(column_ids)
         column_tags = [t for t in tags if t["id"] in selected_column_set]
 
-        if active_view == "columns":
-            total = max(
-                (
-                    len([token for token in all_tokens if any(tt["id"] == tag["id"] for tt in token["tags"])])
-                    for tag in column_tags
-                ),
-                default=0,
-            )
-        else:
-            total = len(all_tokens)
+        total = len(all_tokens)
         total_pages = max(1, (total + per_page - 1) // per_page)
         current_page = min(page, total_pages)
         start = (current_page - 1) * per_page
         tokens = all_tokens[start:start + per_page] if active_view == "list" else []
-
         column_groups = []
-        for tag in column_tags:
-            tag_tokens = [token for token in all_tokens if any(tt["id"] == tag["id"] for tt in token["tags"])]
-            column_groups.append({
-                "tag": tag,
-                "total": len(tag_tokens),
-                "tokens": tag_tokens[start:start + per_page],
-            })
     finally:
         await conn.close()
 
@@ -352,6 +335,62 @@ async def index(
             for col_id in column_ids:
                 params.append(("columns", str(col_id)))
         return f"{_url(request)}?{urlencode(params)}"
+
+    def _column_page(tag_id: int, max_pages: int) -> int:
+        raw = request.query_params.get(f"col_page_{tag_id}")
+        try:
+            parsed = int(raw) if raw else 1
+        except ValueError:
+            parsed = 1
+        return min(max(parsed, 1), max_pages)
+
+    def column_page_url(tag_id: int, target_page: int) -> str:
+        params: list[tuple[str, str]] = [("view", "columns"), ("per_page", str(per_page))]
+        if q:
+            params.append(("q", q))
+        if chain:
+            params.append(("chain", chain))
+        if tag_id_int:
+            params.append(("tag_id", str(tag_id_int)))
+        for col_id in column_ids:
+            params.append(("columns", str(col_id)))
+        for col_id in column_ids:
+            if col_id == tag_id:
+                value = target_page
+            else:
+                value = _column_page(col_id, 999999)
+            if value > 1:
+                params.append((f"col_page_{col_id}", str(value)))
+        return f"{_url(request)}?{urlencode(params)}"
+
+    if active_view == "columns":
+        for tag in column_tags:
+            tag_tokens = [token for token in all_tokens if any(tt["id"] == tag["id"] for tt in token["tags"])]
+            tag_total = len(tag_tokens)
+            tag_total_pages = max(1, (tag_total + per_page - 1) // per_page)
+            tag_page = _column_page(tag["id"], tag_total_pages)
+            tag_start = (tag_page - 1) * per_page
+            column_groups.append({
+                "tag": tag,
+                "total": tag_total,
+                "tokens": tag_tokens[tag_start:tag_start + per_page],
+                "pagination": {
+                    "page": tag_page,
+                    "per_page": per_page,
+                    "total": tag_total,
+                    "total_pages": tag_total_pages,
+                    "start": tag_start + 1 if tag_total else 0,
+                    "end": min(tag_start + per_page, tag_total),
+                    "has_prev": tag_page > 1,
+                    "has_next": tag_page < tag_total_pages,
+                    "prev_url": column_page_url(tag["id"], tag_page - 1) if tag_page > 1 else "",
+                    "next_url": column_page_url(tag["id"], tag_page + 1) if tag_page < tag_total_pages else "",
+                    "pages": [
+                        {"num": n, "url": column_page_url(tag["id"], n), "current": n == tag_page}
+                        for n in range(max(1, tag_page - 1), min(tag_total_pages, tag_page + 1) + 1)
+                    ],
+                },
+            })
 
     pagination = {
         "page": current_page,

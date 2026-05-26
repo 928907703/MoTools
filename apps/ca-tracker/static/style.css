@@ -626,3 +626,20 @@ body {
     width: 100%;
   }
 }
+
+
+.column-pagination {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-soft) 42%, var(--panel));
+}
+.column-pagination .page-summary {
+  font-size: 0.76rem;
+}
+.column-pagination .page-link {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.78rem;
+}
