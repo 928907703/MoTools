@@ -52,6 +52,14 @@
   </form>
 </section>
 
+{% if token.grok_analysis %}
+<section class="card">
+  <h2>Grok 分析</h2>
+  <div class="ai-analysis">{{ token.grok_analysis }}</div>
+  {% if token.grok_analyzed_at %}<p class="muted">分析时间 {{ token.grok_analyzed_at|local_time }}</p>{% endif %}
+</section>
+{% endif %}
+
 <section class="card">
   <h2>链上快照</h2>
   <table>

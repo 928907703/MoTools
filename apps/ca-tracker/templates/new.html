@@ -36,6 +36,8 @@
   <input type="hidden" name="image_url" value="{{ prefill.image_url or '' }}">
   <input type="hidden" name="socials_json" value='{{ (prefill.socials or [])|tojson }}'>
   <input type="hidden" name="pair_created_at" value="{{ prefill.pair_created_at or '' }}">
+  <input type="hidden" name="grok_analysis" value="{{ (grok_analysis.analysis if grok_analysis else '')|e }}">
+  <input type="hidden" name="grok_analyzed_at" value="{{ grok_analysis.analyzed_at if grok_analysis else '' }}">
 
   <div class="prefill-header">
     {% set seed = (prefill.symbol or prefill.name or '?')[:1]|upper %}
@@ -62,6 +64,15 @@
     {% if age is not none %} · 上线 {{ age }}d{% endif %}
     {% if prefill.pair_url %} · <a href="{{ prefill.pair_url }}" target="_blank">DexScreener</a>{% endif %}
   </p>
+
+  <h2>Grok 分析</h2>
+  {% if grok_analysis %}
+  <div class="ai-analysis">{{ grok_analysis.analysis }}</div>
+  {% elif grok_enabled %}
+  <p class="muted">Grok 暂时没有返回分析，可直接保存。</p>
+  {% else %}
+  <p class="muted">未配置 Grok API，当前不会生成分析。</p>
+  {% endif %}
 
   <h2>备注</h2>
   <label>备注内容<textarea name="notes" rows="4"></textarea></label>
