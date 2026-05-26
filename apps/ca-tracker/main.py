@@ -303,23 +303,35 @@ async def index(
         )
         tags = await db.list_tags(conn, user["id"])
         chains = await db.distinct_chains(conn, user["id"])
-        total = len(all_tokens)
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        current_page = min(page, total_pages)
-        start = (current_page - 1) * per_page
-        tokens = all_tokens[start:start + per_page]
-
         column_ids = [_parse_int(v) for v in (columns or [])]
         column_ids = [v for v in column_ids if v]
         if active_view == "columns" and not column_ids:
             column_ids = [t["id"] for t in tags]
         selected_column_set = set(column_ids)
         column_tags = [t for t in tags if t["id"] in selected_column_set]
+
+        if active_view == "columns":
+            total = max(
+                (
+                    len([token for token in all_tokens if any(tt["id"] == tag["id"] for tt in token["tags"])])
+                    for tag in column_tags
+                ),
+                default=0,
+            )
+        else:
+            total = len(all_tokens)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        current_page = min(page, total_pages)
+        start = (current_page - 1) * per_page
+        tokens = all_tokens[start:start + per_page] if active_view == "list" else []
+
         column_groups = []
         for tag in column_tags:
+            tag_tokens = [token for token in all_tokens if any(tt["id"] == tag["id"] for tt in token["tags"])]
             column_groups.append({
                 "tag": tag,
-                "tokens": [token for token in tokens if any(tt["id"] == tag["id"] for tt in token["tags"])],
+                "total": len(tag_tokens),
+                "tokens": tag_tokens[start:start + per_page],
             })
     finally:
         await conn.close()

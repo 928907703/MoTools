@@ -106,13 +106,12 @@
 </section>
 
 {% if view == 'columns' %}
-{{ pager(pagination) }}
 <section class="tag-columns">
   {% for group in column_groups %}
   <section class="tag-column">
     <header class="tag-column-head">
       <span class="tag" style="--tag-color: {{ group.tag.color or '#0ea5e9' }}">{{ group.tag.name }}</span>
-      <span class="muted">{{ group.tokens|length }}</span>
+      <span class="muted">{{ group.tokens|length }}/{{ group.total }}</span>
     </header>
     <div class="tag-column-list">
       {% for t in group.tokens %}
@@ -138,7 +137,7 @@
         </div>
       </article>
       {% else %}
-      <p class="empty">当前页没有属于这个标签的 CA</p>
+      <p class="empty">当前页暂无 CA</p>
       {% endfor %}
     </div>
   </section>
@@ -148,7 +147,6 @@
 </section>
 {{ pager(pagination) }}
 {% else %}
-{{ pager(pagination) }}
 <table class="tokens dense">
   <thead>
     <tr>
