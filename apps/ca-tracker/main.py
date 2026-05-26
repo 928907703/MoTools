@@ -20,7 +20,6 @@ from fastapi.templating import Jinja2Templates
 
 import db
 import dexscreener
-import grok
 import llm
 import scheduler
 
@@ -340,8 +339,6 @@ async def new_form(request: Request, address: Optional[str] = None, chain: Optio
             duplicate=None,
             llm_enabled=llm.is_enabled(),
             llm_suggestion=None,
-            grok_enabled=grok.is_enabled(),
-            grok_analysis=None,
             user=user,
         ),
     )
@@ -374,14 +371,6 @@ async def new_lookup(
     finally:
         await conn.close()
 
-    grok_result = None
-    if grok.is_enabled() and info:
-        grok_result = await grok.analyze_token(
-            address=address,
-            chain=resolved_chain or "",
-            info=info,
-        )
-
     suggestion = None
     if llm.is_enabled() and info:
         suggestion = await llm.suggest_tags(
@@ -405,8 +394,6 @@ async def new_lookup(
             duplicate=duplicate,
             llm_enabled=llm.is_enabled(),
             llm_suggestion=suggestion,
-            grok_enabled=grok.is_enabled(),
-            grok_analysis=grok_result,
             user=user,
         ),
     )
@@ -430,8 +417,6 @@ async def new_submit(
     image_url: str = Form(""),
     socials_json: str = Form(""),
     pair_created_at: str = Form(""),
-    grok_analysis: str = Form(""),
-    grok_analyzed_at: str = Form(""),
 ):
     user = await _require_user(request)
     address = address.strip()
@@ -459,8 +444,6 @@ async def new_submit(
                 "image_url": image_url.strip() or None,
                 "socials_json": socials_json.strip() or None,
                 "pair_created_at": pair_created_at.strip() or None,
-                "grok_analysis": grok_analysis.strip() or None,
-                "grok_analyzed_at": grok_analyzed_at.strip() or None,
             },
         )
 

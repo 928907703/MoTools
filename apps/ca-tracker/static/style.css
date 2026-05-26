@@ -506,12 +506,3 @@ body {
   display: inline-block;
 }
 
-.ai-analysis {
-  white-space: pre-wrap;
-  color: var(--text);
-  background: var(--panel-soft);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.85rem 1rem;
-  line-height: 1.7;
-}

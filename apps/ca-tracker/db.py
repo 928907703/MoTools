@@ -37,8 +37,6 @@ CREATE TABLE IF NOT EXISTS tokens (
     image_url       TEXT,
     socials_json    TEXT,
     pair_created_at TEXT,
-    grok_analysis   TEXT,
-    grok_analyzed_at TEXT,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
     UNIQUE(user_id, address, chain)
@@ -117,8 +115,6 @@ async def _migrate_token_unique_scope(db: aiosqlite.Connection) -> None:
                     image_url       TEXT,
                     socials_json    TEXT,
                     pair_created_at TEXT,
-                    grok_analysis   TEXT,
-                    grok_analyzed_at TEXT,
                     created_at      TEXT NOT NULL,
                     updated_at      TEXT NOT NULL,
                     UNIQUE(user_id, address, chain)
@@ -127,10 +123,10 @@ async def _migrate_token_unique_scope(db: aiosqlite.Connection) -> None:
             await db.execute(
                 """INSERT INTO tokens_new (
                     id, user_id, address, chain, name, symbol, first_seen_at, notes, rating,
-                    image_url, socials_json, pair_created_at, grok_analysis, grok_analyzed_at, created_at, updated_at
+                    image_url, socials_json, pair_created_at, created_at, updated_at
                 )
                 SELECT id, user_id, address, chain, name, symbol, first_seen_at, notes, rating,
-                       image_url, socials_json, pair_created_at, grok_analysis, grok_analyzed_at, created_at, updated_at
+                       image_url, socials_json, pair_created_at, created_at, updated_at
                 FROM tokens"""
             )
             await db.execute("DROP TABLE tokens")
@@ -149,8 +145,6 @@ async def init_db() -> None:
             "image_url TEXT",
             "socials_json TEXT",
             "pair_created_at TEXT",
-            "grok_analysis TEXT",
-            "grok_analyzed_at TEXT",
             "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE",
         ):
             try:
@@ -246,8 +240,8 @@ async def create_token(db: aiosqlite.Connection, data: dict[str, Any]) -> int:
     ts = now_iso()
     cur = await db.execute(
         """INSERT INTO tokens (user_id, address, chain, name, symbol, first_seen_at, notes, rating,
-                               image_url, socials_json, pair_created_at, grok_analysis, grok_analyzed_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                               image_url, socials_json, pair_created_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data["user_id"],
             data["address"],
@@ -260,8 +254,6 @@ async def create_token(db: aiosqlite.Connection, data: dict[str, Any]) -> int:
             data.get("image_url"),
             data.get("socials_json"),
             data.get("pair_created_at"),
-            data.get("grok_analysis"),
-            data.get("grok_analyzed_at"),
             ts,
             ts,
         ),
@@ -335,21 +327,6 @@ async def update_token(db: aiosqlite.Connection, user_id: int, token_id: int, da
             token_id,
             user_id,
         ),
-    )
-    await db.commit()
-
-
-async def update_grok_analysis(
-    db: aiosqlite.Connection,
-    user_id: int,
-    token_id: int,
-    analysis: Optional[str],
-    analyzed_at: Optional[str] = None,
-) -> None:
-    await db.execute(
-        """UPDATE tokens SET grok_analysis = ?, grok_analyzed_at = ?, updated_at = ?
-           WHERE id = ? AND user_id = ?""",
-        (analysis, analyzed_at or now_iso(), now_iso(), token_id, user_id),
     )
     await db.commit()
 

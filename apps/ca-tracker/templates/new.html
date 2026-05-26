@@ -36,8 +36,6 @@
   <input type="hidden" name="image_url" value="{{ prefill.image_url or '' }}">
   <input type="hidden" name="socials_json" value='{{ (prefill.socials or [])|tojson }}'>
   <input type="hidden" name="pair_created_at" value="{{ prefill.pair_created_at or '' }}">
-  <input type="hidden" name="grok_analysis" value="{{ (grok_analysis.analysis if grok_analysis else '')|e }}">
-  <input type="hidden" name="grok_analyzed_at" value="{{ grok_analysis.analyzed_at if grok_analysis else '' }}">
 
   <div class="prefill-header">
     {% set seed = (prefill.symbol or prefill.name or '?')[:1]|upper %}

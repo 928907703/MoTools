@@ -52,39 +52,4 @@
   </form>
 </section>
 
-{% if token.grok_analysis %}
-<section class="card">
-  <h2>Grok 分析</h2>
-  <div class="ai-analysis">{{ token.grok_analysis }}</div>
-  {% if token.grok_analyzed_at %}<p class="muted">分析时间 {{ token.grok_analyzed_at|local_time }}</p>{% endif %}
-</section>
-{% endif %}
 
-<section class="card">
-  <h2>链上快照</h2>
-  <table>
-    <thead><tr><th>阶段</th><th>时间</th><th>价格</th><th>MC</th><th>FDV</th><th>流动性</th></tr></thead>
-    <tbody>
-      {% for label, s in [('首次导入', first_snapshot), ('最新', latest_snapshot)] if s %}
-      <tr>
-        <td><strong>{{ label }}</strong></td>
-        <td class="muted">{{ s.snapshot_at|local_time }}</td>
-        <td>{% if s.price_usd %}${{ '%.8f' % s.price_usd }}{% endif %}</td>
-        <td>{% if s.market_cap %}${{ '{:,.0f}'.format(s.market_cap) }}{% endif %}</td>
-        <td>{% if s.fdv %}${{ '{:,.0f}'.format(s.fdv) }}{% endif %}</td>
-        <td>{% if s.liquidity_usd %}${{ '{:,.0f}'.format(s.liquidity_usd) }}{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="empty">还没有快照</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-
-
-<section class="card danger">
-  <form method="post" action="{{ prefix }}/token/{{ token.id }}/delete" onsubmit="return confirm('确定删除这个 CA?');">
-    <button type="submit" class="danger">删除</button>
-  </form>
-</section>
-{% endblock %}
