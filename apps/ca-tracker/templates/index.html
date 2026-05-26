@@ -21,7 +21,7 @@
 {%- endmacro %}
 
 {% macro fmt_money(v) -%}
-  {%- if v is none -%}?
+  {%- if v is none -%}-
   {%- elif v >= 1000000 -%}${{ '%.2f'|format(v / 1000000) }}M
   {%- elif v >= 1000 -%}${{ '%.1f'|format(v / 1000) }}K
   {%- else -%}${{ '%.2f'|format(v) }}
@@ -29,16 +29,46 @@
 {%- endmacro %}
 
 {% macro fmt_price(v) -%}
-  {%- if v is none -%}?
+  {%- if v is none -%}-
   {%- elif v >= 1 -%}${{ '%.4f'|format(v) }}
   {%- elif v >= 0.01 -%}${{ '%.6f'|format(v) }}
   {%- else -%}${{ '%.8f'|format(v) }}
   {%- endif -%}
 {%- endmacro %}
 
+{% macro pager(pagination) -%}
+  {% if pagination.total_pages > 1 %}
+  <nav class="pagination" aria-label="分页">
+    <span class="page-summary">第 {{ pagination.start }}-{{ pagination.end }} 条，共 {{ pagination.total }} 条</span>
+    <div class="page-links">
+      {% if pagination.has_prev %}
+        <a href="{{ pagination.prev_url }}" class="page-link">上一页</a>
+      {% else %}
+        <span class="page-link disabled">上一页</span>
+      {% endif %}
+      {% for p in pagination.pages %}
+        {% if p.current %}
+          <span class="page-link current">{{ p.num }}</span>
+        {% else %}
+          <a href="{{ p.url }}" class="page-link">{{ p.num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if pagination.has_next %}
+        <a href="{{ pagination.next_url }}" class="page-link">下一页</a>
+      {% else %}
+        <span class="page-link disabled">下一页</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% else %}
+  <div class="pagination single"><span class="page-summary">共 {{ pagination.total }} 条</span></div>
+  {% endif %}
+{%- endmacro %}
+
 {% block content %}
 <section class="toolbar">
   <form method="get" action="{{ prefix or '/' }}" class="filters auto-filter">
+    <input type="hidden" name="page" value="{{ pagination.page }}">
     <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号" autocomplete="off">
     <select name="view" aria-label="视图模式">
       <option value="list" {% if view != 'columns' %}selected{% endif %}>列表</option>
@@ -56,6 +86,11 @@
         <option value="{{ t.id }}" {% if tag_id == t.id %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
     </select>
+    <select name="per_page" aria-label="每页数量">
+      {% for n in [10, 20, 50, 100] %}
+        <option value="{{ n }}" {% if pagination.per_page == n %}selected{% endif %}>每页 {{ n }}</option>
+      {% endfor %}
+    </select>
     <a href="{{ prefix or '/' }}" class="btn-ghost">重置</a>
     {% if view == 'columns' %}
     <div class="column-picker" aria-label="选择展示标签">
@@ -71,6 +106,7 @@
 </section>
 
 {% if view == 'columns' %}
+{{ pager(pagination) }}
 <section class="tag-columns">
   {% for group in column_groups %}
   <section class="tag-column">
@@ -85,10 +121,10 @@
         <a href="{{ prefix }}/token/{{ t.id }}" class="token-cell">
           {{ logo(t.image_url, t.symbol, t.name, 'sm') }}
           <span class="token-cell-text">
-            <span class="token-cell-name">{{ t.name or t.symbol or '?' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}</span>
+            <span class="token-cell-name">{{ t.name or t.symbol or '-' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}</span>
             <span class="token-cell-meta">
               <span class="chain-badge">{{ t.chain }}</span>
-              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
+              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}...{{ t.address[-4:] }}</span>
               <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
                 <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
               </button>
@@ -102,22 +138,24 @@
         </div>
       </article>
       {% else %}
-      <p class="empty">复制地址复制地址 CA</p>
+      <p class="empty">当前页没有属于这个标签的 CA</p>
       {% endfor %}
     </div>
   </section>
   {% else %}
-  <p class="empty">复制地址复制地址复制地址复制地址复制地址复制地址</p>
+  <p class="empty">暂无可展示的标签分栏</p>
   {% endfor %}
 </section>
+{{ pager(pagination) }}
 {% else %}
+{{ pager(pagination) }}
 <table class="tokens dense">
   <thead>
     <tr>
-      <th class="col-token">标签</th>
-      <th class="num">标签</th>
-      <th class="num">MC / FDV / 标签</th>
-      <th class="num">标签</th>
+      <th class="col-token">项目</th>
+      <th class="num">天数</th>
+      <th class="num">MC / FDV / 流动性</th>
+      <th class="num">价格</th>
       <th class="num">1h</th>
       <th class="num">24h</th>
       <th>标签</th>
@@ -132,11 +170,11 @@
           {{ logo(t.image_url, t.symbol, t.name, 'sm') }}
           <span class="token-cell-text">
             <span class="token-cell-name">
-              {{ t.name or t.symbol or '?' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}
+              {{ t.name or t.symbol or '-' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}
             </span>
             <span class="token-cell-meta">
               <span class="chain-badge">{{ t.chain }}</span>
-              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
+              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}...{{ t.address[-4:] }}</span>
               <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
                 <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
               </button>
@@ -147,7 +185,7 @@
       </td>
       <td class="num muted">
         {%- set age = t.pair_created_at|age_days -%}
-        {%- if age is not none -%}{{ age }}d{%- else -%}?{%- endif -%}
+        {%- if age is not none -%}{{ age }}d{%- else -%}-{%- endif -%}
       </td>
       <td class="num mc-cell">
         <div class="mc-value {{ mc_tier(ls.market_cap if ls else none) }}">
@@ -159,7 +197,7 @@
       <td class="num price">
         {%- if ls and ls.price_usd -%}
           {{ fmt_price(ls.price_usd) }}
-        {%- else -%}?{%- endif -%}
+        {%- else -%}-{%- endif -%}
       </td>
       <td class="num change">{{ change_pct(t.change_1h) }}</td>
       <td class="num change">{{ change_pct(t.change_24h) }}</td>
@@ -170,9 +208,10 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="empty">标签? CA?<a href="{{ prefix }}/new">复制地址?</a>?</td></tr>
+    <tr><td colspan="7" class="empty">还没有 CA，去 <a href="{{ prefix }}/new">录入</a> 一个吧。</td></tr>
     {% endfor %}
   </tbody>
 </table>
+{{ pager(pagination) }}
 {% endif %}
 {% endblock %}

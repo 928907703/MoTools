@@ -11,6 +11,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
@@ -285,12 +286,15 @@ async def index(
     view: str = "list",
     columns: Optional[list[str]] = Query(default=None),
     refreshed: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=10, le=100),
 ):
     user = await _require_user(request)
     tag_id_int = _parse_int(tag_id)
+    active_view = "columns" if view == "columns" else "list"
     conn = await db.connect()
     try:
-        tokens = await db.list_tokens(
+        all_tokens = await db.list_tokens(
             conn,
             user_id=user["id"],
             q=q or None,
@@ -299,11 +303,18 @@ async def index(
         )
         tags = await db.list_tags(conn, user["id"])
         chains = await db.distinct_chains(conn, user["id"])
+        total = len(all_tokens)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        current_page = min(page, total_pages)
+        start = (current_page - 1) * per_page
+        tokens = all_tokens[start:start + per_page]
+
         column_ids = [_parse_int(v) for v in (columns or [])]
         column_ids = [v for v in column_ids if v]
-        if view == "columns" and not column_ids:
+        if active_view == "columns" and not column_ids:
             column_ids = [t["id"] for t in tags]
-        column_tags = [t for t in tags if t["id"] in set(column_ids)]
+        selected_column_set = set(column_ids)
+        column_tags = [t for t in tags if t["id"] in selected_column_set]
         column_groups = []
         for tag in column_tags:
             column_groups.append({
@@ -312,6 +323,41 @@ async def index(
             })
     finally:
         await conn.close()
+
+    def page_url(target_page: int) -> str:
+        params: list[tuple[str, str]] = [
+            ("page", str(target_page)),
+            ("per_page", str(per_page)),
+        ]
+        if q:
+            params.append(("q", q))
+        if chain:
+            params.append(("chain", chain))
+        if tag_id_int:
+            params.append(("tag_id", str(tag_id_int)))
+        if active_view == "columns":
+            params.append(("view", "columns"))
+            for col_id in column_ids:
+                params.append(("columns", str(col_id)))
+        return f"{_url(request)}?{urlencode(params)}"
+
+    pagination = {
+        "page": current_page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "start": start + 1 if total else 0,
+        "end": min(start + per_page, total),
+        "has_prev": current_page > 1,
+        "has_next": current_page < total_pages,
+        "prev_url": page_url(current_page - 1) if current_page > 1 else "",
+        "next_url": page_url(current_page + 1) if current_page < total_pages else "",
+        "pages": [
+            {"num": n, "url": page_url(n), "current": n == current_page}
+            for n in range(max(1, current_page - 2), min(total_pages, current_page + 2) + 1)
+        ],
+    }
+
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -323,9 +369,10 @@ async def index(
             q=q or "",
             chain=chain or "",
             tag_id=tag_id_int,
-            view=("columns" if view == "columns" else "list"),
-            selected_column_ids=set(column_ids),
+            view=active_view,
+            selected_column_ids=selected_column_set,
             column_groups=column_groups,
+            pagination=pagination,
             refreshed=_parse_int(refreshed),
             llm_enabled=llm.is_enabled(),
             user=user,

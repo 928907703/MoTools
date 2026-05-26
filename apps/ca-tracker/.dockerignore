@@ -10,3 +10,7 @@ data/
 *.db
 .DS_Store
 Thumbs.db
+
+node_modules
+
+static/dist
