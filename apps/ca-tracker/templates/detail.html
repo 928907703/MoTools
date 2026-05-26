@@ -73,14 +73,6 @@
   </table>
 </section>
 
-<section class="card">
-  <h2>备注</h2>
-  {% if token.notes %}
-  <p class="note-text">{{ token.notes }}</p>
-  {% else %}
-  <p class="empty">还没有备注</p>
-  {% endif %}
-</section>
 
 <section class="card danger">
   <form method="post" action="{{ prefix }}/token/{{ token.id }}/delete" onsubmit="return confirm('确定删除这个 CA?');">
