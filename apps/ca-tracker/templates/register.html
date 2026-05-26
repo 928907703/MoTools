@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}注册 · CA Tracker{% endblock %}
+{% block content %}
+<section class="login-panel">
+  <h1>注册 CA Tracker</h1>
+  <p class="muted">新账户会拥有独立的 CA 数据空间。</p>
+  {% if error == "exists" %}
+  <div class="warn">用户名已存在。</div>
+  {% elif error == "mismatch" %}
+  <div class="warn">两次输入的密码不一致。</div>
+  {% elif error %}
+  <div class="warn">用户名至少 3 位，密码至少 6 位。</div>
+  {% endif %}
+  <form method="post" action="{{ prefix }}/register" class="login-form">
+    <label>用户名<input name="username" autocomplete="username" required minlength="3"></label>
+    <label>密码<input name="password" type="password" autocomplete="new-password" required minlength="6"></label>
+    <label>确认密码<input name="password_confirm" type="password" autocomplete="new-password" required minlength="6"></label>
+    <button class="primary" type="submit">注册</button>
+  </form>
+  <p class="auth-alt"><a href="{{ prefix }}/login">已有账号，去登录</a></p>
+</section>
+{% endblock %}

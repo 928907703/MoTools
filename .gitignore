@@ -21,3 +21,12 @@ apps/*/data/
 Thumbs.db
 .vscode/
 .idea/
+n#
+# Server-only generated files
+*.bak-*
+.env.bak-*
+.initial-admin-password
+**/*.bak-*
+**/.env.bak-*
+**/.initial-admin-password
+n#

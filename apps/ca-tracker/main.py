@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -24,6 +27,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 
 load_dotenv()
 
+SESSION_COOKIE = "motools_session"
+SESSION_DAYS = 30
+DEFAULT_USERNAME = os.getenv("CA_ADMIN_USERNAME", "moshimo")
+DEFAULT_PASSWORD = os.getenv("CA_ADMIN_PASSWORD", "moshimo-change-me")
+
 BASE_DIR = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -40,6 +48,9 @@ def _age_days(iso: Optional[str]) -> Optional[int]:
         return None
 
 
+DISPLAY_TZ = timezone(timedelta(hours=8))
+
+
 def _parse_socials(raw: Optional[str]) -> list[dict]:
     if not raw:
         return []
@@ -50,13 +61,38 @@ def _parse_socials(raw: Optional[str]) -> list[dict]:
         return []
 
 
+def _to_local_dt(iso: Optional[str]) -> Optional[datetime]:
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(DISPLAY_TZ)
+    except ValueError:
+        return None
+
+
+def _local_time(iso: Optional[str]) -> str:
+    dt = _to_local_dt(iso)
+    return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else ""
+
+
+def _datetime_local_value(iso: Optional[str]) -> str:
+    dt = _to_local_dt(iso)
+    return dt.strftime("%Y-%m-%dT%H:%M") if dt else ""
+
+
 templates.env.filters["age_days"] = _age_days
 templates.env.filters["socials"] = _parse_socials
+templates.env.filters["local_time"] = _local_time
+templates.env.filters["datetime_local"] = _datetime_local_value
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.init_db()
+    await _ensure_initial_user()
     task = asyncio.create_task(scheduler.run_periodic_snapshots())
     try:
         yield
@@ -88,6 +124,58 @@ def _context(request: Request, **values):
     return values
 
 
+
+def _hash_password(password: str, salt: str | None = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        algo, salt, expected = password_hash.split("$", 2)
+    except ValueError:
+        return False
+    if algo != "pbkdf2_sha256":
+        return False
+    actual = _hash_password(password, salt).split("$", 2)[2]
+    return hmac.compare_digest(actual, expected)
+
+
+async def _ensure_initial_user() -> None:
+    conn = await db.connect()
+    try:
+        user = await db.get_user_by_username(conn, DEFAULT_USERNAME)
+        if user is None:
+            user_id = await db.create_user(conn, DEFAULT_USERNAME, _hash_password(DEFAULT_PASSWORD))
+        else:
+            user_id = user["id"]
+            if DEFAULT_PASSWORD and DEFAULT_PASSWORD != "moshimo-change-me":
+                await db.update_user_password(conn, user_id, _hash_password(DEFAULT_PASSWORD))
+        await db.assign_unowned_data(conn, user_id)
+    finally:
+        await conn.close()
+
+
+async def _current_user(request: Request) -> dict | None:
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    conn = await db.connect()
+    try:
+        user = await db.get_session_user(conn, token)
+        return dict(user) if user else None
+    finally:
+        await conn.close()
+
+
+async def _require_user(request: Request) -> dict:
+    user = await _current_user(request)
+    if user is None:
+        raise HTTPException(status_code=303, headers={"Location": _url(request, "/login")})
+    return user
+
+
 def _parse_int(v: Optional[str]) -> Optional[int]:
     if v is None or v == "":
         return None
@@ -95,6 +183,95 @@ def _parse_int(v: Optional[str]) -> Optional[int]:
         return int(v)
     except ValueError:
         return None
+
+
+def _normalize_datetime_input(value: str) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=DISPLAY_TZ)
+        return dt.astimezone(timezone.utc).isoformat()
+    except ValueError:
+        return value
+
+
+
+# ---------- 登录 ----------
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, error: str = ""):
+    user = await _current_user(request)
+    if user:
+        return RedirectResponse(_url(request), status_code=303)
+    return templates.TemplateResponse(request, "login.html", _context(request, error=error))
+
+
+async def _create_session_response(request: Request, conn, user_id: int) -> RedirectResponse:
+    token = secrets.token_urlsafe(32)
+    expires = (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()
+    await db.create_session(conn, token, user_id, expires)
+    resp = RedirectResponse(_url(request), status_code=303)
+    resp.set_cookie(SESSION_COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=True)
+    return resp
+
+
+@app.post("/login")
+async def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+    conn = await db.connect()
+    try:
+        user = await db.get_user_by_username(conn, username)
+        if not user or not _verify_password(password, user["password_hash"]):
+            return RedirectResponse(_url(request, "/login?error=1"), status_code=303)
+        return await _create_session_response(request, conn, user["id"])
+    finally:
+        await conn.close()
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_form(request: Request, error: str = ""):
+    user = await _current_user(request)
+    if user:
+        return RedirectResponse(_url(request), status_code=303)
+    return templates.TemplateResponse(request, "register.html", _context(request, error=error))
+
+
+@app.post("/register")
+async def register_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+):
+    username = username.strip()
+    if len(username) < 3 or len(password) < 6:
+        return RedirectResponse(_url(request, "/register?error=invalid"), status_code=303)
+    if password != password_confirm:
+        return RedirectResponse(_url(request, "/register?error=mismatch"), status_code=303)
+
+    conn = await db.connect()
+    try:
+        if await db.get_user_by_username(conn, username):
+            return RedirectResponse(_url(request, "/register?error=exists"), status_code=303)
+        user_id = await db.create_user(conn, username, _hash_password(password))
+        return await _create_session_response(request, conn, user_id)
+    finally:
+        await conn.close()
+
+
+@app.post("/logout")
+async def logout(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        conn = await db.connect()
+        try:
+            await db.delete_session(conn, token)
+        finally:
+            await conn.close()
+    resp = RedirectResponse(_url(request, "/login"), status_code=303)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
 
 
 # ---------- 列表页 ----------
@@ -105,22 +282,21 @@ async def index(
     q: Optional[str] = None,
     chain: Optional[str] = None,
     tag_id: Optional[str] = None,
-    min_rating: Optional[str] = None,
+    refreshed: Optional[str] = None,
 ):
-    """筛选页。tag_id/min_rating 用 str 接，避免表单留空时空字符串 422。"""
+    user = await _require_user(request)
     tag_id_int = _parse_int(tag_id)
-    min_rating_int = _parse_int(min_rating)
     conn = await db.connect()
     try:
         tokens = await db.list_tokens(
             conn,
+            user_id=user["id"],
             q=q or None,
             chain=chain or None,
             tag_id=tag_id_int,
-            min_rating=min_rating_int,
         )
-        tags = await db.list_tags(conn)
-        chains = await db.distinct_chains(conn)
+        tags = await db.list_tags(conn, user["id"])
+        chains = await db.distinct_chains(conn, user["id"])
     finally:
         await conn.close()
     return templates.TemplateResponse(
@@ -134,8 +310,9 @@ async def index(
             q=q or "",
             chain=chain or "",
             tag_id=tag_id_int,
-            min_rating=min_rating_int,
+            refreshed=_parse_int(refreshed),
             llm_enabled=llm.is_enabled(),
+            user=user,
         ),
     )
 
@@ -144,9 +321,10 @@ async def index(
 
 @app.get("/new", response_class=HTMLResponse)
 async def new_form(request: Request, address: Optional[str] = None, chain: Optional[str] = None):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        tags = await db.list_tags(conn)
+        tags = await db.list_tags(conn, user["id"])
     finally:
         await conn.close()
     return templates.TemplateResponse(
@@ -161,6 +339,7 @@ async def new_form(request: Request, address: Optional[str] = None, chain: Optio
             duplicate=None,
             llm_enabled=llm.is_enabled(),
             llm_suggestion=None,
+            user=user,
         ),
     )
 
@@ -172,6 +351,7 @@ async def new_lookup(
     chain: str = Form(""),
 ):
     """抓 DexScreener 数据 + 查重 + (可选) LLM 标签建议，回填表单。"""
+    user = await _require_user(request)
     address = address.strip()
     chain = chain.strip() or None
     info = await dexscreener.fetch_token(address, chain)
@@ -179,14 +359,13 @@ async def new_lookup(
 
     conn = await db.connect()
     try:
-        tags = await db.list_tags(conn)
+        tags = await db.list_tags(conn, user["id"])
         duplicate = None
         if resolved_chain:
-            existing = await db.find_token(conn, address, resolved_chain)
+            existing = await db.find_token(conn, user["id"], address, resolved_chain)
             if existing:
                 duplicate = {
                     "id": existing["id"],
-                    "rating": existing["rating"],
                     "notes": existing["notes"],
                 }
     finally:
@@ -215,6 +394,7 @@ async def new_lookup(
             duplicate=duplicate,
             llm_enabled=llm.is_enabled(),
             llm_suggestion=suggestion,
+            user=user,
         ),
     )
 
@@ -227,12 +407,7 @@ async def new_submit(
     name: str = Form(""),
     symbol: str = Form(""),
     notes: str = Form(""),
-    rating: str = Form(""),
     first_seen_at: str = Form(""),
-    kol: str = Form(""),
-    group_name: str = Form(""),
-    link: str = Form(""),
-    posted_at: str = Form(""),
     tag_ids: list[int] = Form(default=[]),
     new_tags: str = Form(""),
     price_usd: str = Form(""),
@@ -243,6 +418,7 @@ async def new_submit(
     socials_json: str = Form(""),
     pair_created_at: str = Form(""),
 ):
+    user = await _require_user(request)
     address = address.strip()
     chain = chain.strip()
     if not address or not chain:
@@ -250,45 +426,34 @@ async def new_submit(
 
     conn = await db.connect()
     try:
-        existing = await db.find_token(conn, address, chain)
+        existing = await db.find_token(conn, user["id"], address, chain)
         if existing:
             return RedirectResponse(_url(request, f"/token/{existing['id']}"), status_code=303)
 
         token_id = await db.create_token(
             conn,
             {
+                "user_id": user["id"],
                 "address": address,
                 "chain": chain,
                 "name": name.strip() or None,
                 "symbol": symbol.strip() or None,
                 "notes": notes.strip() or None,
-                "rating": _parse_int(rating),
-                "first_seen_at": first_seen_at.strip() or None,
+                "rating": None,
+                "first_seen_at": _normalize_datetime_input(first_seen_at.strip()) or None,
                 "image_url": image_url.strip() or None,
                 "socials_json": socials_json.strip() or None,
                 "pair_created_at": pair_created_at.strip() or None,
             },
         )
 
-        if any([kol, group_name, link, posted_at]):
-            await db.add_source(
-                conn,
-                token_id,
-                {
-                    "kol": kol.strip() or None,
-                    "group_name": group_name.strip() or None,
-                    "link": link.strip() or None,
-                    "posted_at": posted_at.strip() or None,
-                },
-            )
-
         tag_id_set: list[int] = list(tag_ids)
         for raw in new_tags.split(","):
             n = raw.strip()
             if n:
-                tag_id_set.append(await db.create_tag(conn, n, None))
+                tag_id_set.append(await db.create_tag(conn, user["id"], n, None))
         if tag_id_set:
-            await db.set_token_tags(conn, token_id, tag_id_set)
+            await db.set_token_tags(conn, user["id"], token_id, tag_id_set)
 
         if any([price_usd, market_cap, fdv, liquidity_usd]):
             def f(v: str) -> Optional[float]:
@@ -317,9 +482,10 @@ async def new_submit(
 
 @app.get("/token/{token_id}", response_class=HTMLResponse)
 async def token_detail(request: Request, token_id: int):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        token = await db.get_token(conn, token_id)
+        token = await db.get_token(conn, user["id"], token_id)
         if not token:
             raise HTTPException(404)
         token_d = dict(token)
@@ -328,7 +494,9 @@ async def token_detail(request: Request, token_id: int):
         token_d["change_24h"] = await db.market_cap_change(conn, token_id, 24)
         sources = await db.get_sources(conn, token_id)
         snapshots = await db.get_snapshots(conn, token_id)
-        all_tags = await db.list_tags(conn)
+        latest = await db.latest_snapshot(conn, token_id)
+        first = await db.first_snapshot(conn, token_id)
+        all_tags = await db.list_tags(conn, user["id"])
     finally:
         await conn.close()
     return templates.TemplateResponse(
@@ -339,8 +507,11 @@ async def token_detail(request: Request, token_id: int):
             token=token_d,
             sources=sources,
             snapshots=snapshots,
+            latest_snapshot=latest,
+            first_snapshot=first,
             all_tags=all_tags,
             selected_tag_ids={t["id"] for t in token_d["tags"]},
+            user=user,
         ),
     )
 
@@ -352,33 +523,34 @@ async def token_edit(
     name: str = Form(""),
     symbol: str = Form(""),
     notes: str = Form(""),
-    rating: str = Form(""),
     first_seen_at: str = Form(""),
     tag_ids: list[int] = Form(default=[]),
     new_tags: str = Form(""),
 ):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        t = await db.get_token(conn, token_id)
+        t = await db.get_token(conn, user["id"], token_id)
         if not t:
             raise HTTPException(404)
         await db.update_token(
             conn,
+            user["id"],
             token_id,
             {
                 "name": name.strip() or None,
                 "symbol": symbol.strip() or None,
                 "notes": notes.strip() or None,
-                "rating": _parse_int(rating),
-                "first_seen_at": first_seen_at.strip() or t["first_seen_at"],
+                "rating": None,
+                "first_seen_at": _normalize_datetime_input(first_seen_at.strip()) or t["first_seen_at"],
             },
         )
         tag_id_set: list[int] = list(tag_ids)
         for raw in new_tags.split(","):
             n = raw.strip()
             if n:
-                tag_id_set.append(await db.create_tag(conn, n, None))
-        await db.set_token_tags(conn, token_id, tag_id_set)
+                tag_id_set.append(await db.create_tag(conn, user["id"], n, None))
+        await db.set_token_tags(conn, user["id"], token_id, tag_id_set)
     finally:
         await conn.close()
     return RedirectResponse(_url(request, f"/token/{token_id}"), status_code=303)
@@ -393,9 +565,10 @@ async def token_add_source(
     link: str = Form(""),
     posted_at: str = Form(""),
 ):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        if not await db.get_token(conn, token_id):
+        if not await db.get_token(conn, user["id"], token_id):
             raise HTTPException(404)
         await db.add_source(
             conn,
@@ -414,9 +587,10 @@ async def token_add_source(
 
 @app.post("/token/{token_id}/snapshot")
 async def token_refresh_snapshot(request: Request, token_id: int):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        token = await db.get_token(conn, token_id)
+        token = await db.get_token(conn, user["id"], token_id)
         if not token:
             raise HTTPException(404)
         info = await dexscreener.fetch_token(token["address"], token["chain"])
@@ -432,24 +606,47 @@ async def token_refresh_snapshot(request: Request, token_id: int):
                     "source": "dexscreener",
                 },
             )
-            socials = info.get("socials") or []
-            await db.update_token_metadata(
-                conn,
-                token_id,
-                image_url=info.get("image_url"),
-                socials_json=json.dumps(socials, ensure_ascii=False) if socials else None,
-                pair_created_at=info.get("pair_created_at"),
-            )
+            await db.refresh_token_profile(conn, user["id"], token_id, info)
     finally:
         await conn.close()
     return RedirectResponse(_url(request, f"/token/{token_id}"), status_code=303)
 
 
+@app.post("/refresh-all")
+async def refresh_all(request: Request):
+    user = await _require_user(request)
+    conn = await db.connect()
+    refreshed = 0
+    try:
+        targets = await db.list_refresh_targets(conn, user["id"])
+        for token in targets:
+            info = await dexscreener.fetch_token(token["address"], token["chain"])
+            if not info:
+                continue
+            await db.add_snapshot(
+                conn,
+                token["id"],
+                {
+                    "price_usd": info.get("price_usd"),
+                    "market_cap": info.get("market_cap"),
+                    "fdv": info.get("fdv"),
+                    "liquidity_usd": info.get("liquidity_usd"),
+                    "source": "dexscreener",
+                },
+            )
+            await db.refresh_token_profile(conn, user["id"], token["id"], info)
+            refreshed += 1
+    finally:
+        await conn.close()
+    return RedirectResponse(_url(request, f"/?refreshed={refreshed}"), status_code=303)
+
+
 @app.post("/token/{token_id}/delete")
 async def token_delete(request: Request, token_id: int):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        await db.delete_token(conn, token_id)
+        await db.delete_token(conn, user["id"], token_id)
     finally:
         await conn.close()
     return RedirectResponse(_url(request), status_code=303)
@@ -459,29 +656,43 @@ async def token_delete(request: Request, token_id: int):
 
 @app.get("/tags", response_class=HTMLResponse)
 async def tags_page(request: Request):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        tags = await db.list_tags(conn)
+        tags = await db.list_tags(conn, user["id"])
     finally:
         await conn.close()
-    return templates.TemplateResponse(request, "tags.html", _context(request, tags=tags))
+    return templates.TemplateResponse(request, "tags.html", _context(request, tags=tags, user=user))
 
 
 @app.post("/tags")
-async def tags_create(request: Request, name: str = Form(...), category: str = Form("")):
+async def tags_create(
+    request: Request,
+    name: str = Form(...),
+    category: str = Form(""),
+    color: str = Form("#0ea5e9"),
+):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        await db.create_tag(conn, name, category.strip() or None)
+        await db.create_tag(conn, user["id"], name, category.strip() or None, color)
     finally:
         await conn.close()
     return RedirectResponse(_url(request, "/tags"), status_code=303)
 
 
 @app.post("/tags/{tag_id}/update")
-async def tags_update(request: Request, tag_id: int, name: str = Form(...), category: str = Form("")):
+async def tags_update(
+    request: Request,
+    tag_id: int,
+    name: str = Form(...),
+    category: str = Form(""),
+    color: str = Form("#0ea5e9"),
+):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        await db.update_tag(conn, tag_id, name, category.strip() or None)
+        await db.update_tag(conn, user["id"], tag_id, name, category.strip() or None, color)
     finally:
         await conn.close()
     return RedirectResponse(_url(request, "/tags"), status_code=303)
@@ -489,9 +700,10 @@ async def tags_update(request: Request, tag_id: int, name: str = Form(...), cate
 
 @app.post("/tags/{tag_id}/delete")
 async def tags_delete(request: Request, tag_id: int):
+    user = await _require_user(request)
     conn = await db.connect()
     try:
-        await db.delete_tag(conn, tag_id)
+        await db.delete_tag(conn, user["id"], tag_id)
     finally:
         await conn.close()
     return RedirectResponse(_url(request, "/tags"), status_code=303)

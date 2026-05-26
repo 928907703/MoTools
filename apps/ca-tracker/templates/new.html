@@ -21,8 +21,7 @@
 
 {% if duplicate %}
 <div class="warn">
-  ⚠️ 已见过这个 CA。<a href="{{ prefix }}/token/{{ duplicate.id }}">查看详情</a>
-  {% if duplicate.rating %}（上次评分 {{ duplicate.rating }}）{% endif %}
+  已见过这个 CA。<a href="{{ prefix }}/token/{{ duplicate.id }}">查看详情</a>
 </div>
 {% endif %}
 
@@ -64,19 +63,8 @@
     {% if prefill.pair_url %} · <a href="{{ prefill.pair_url }}" target="_blank">DexScreener</a>{% endif %}
   </p>
 
-  <h2>来源</h2>
-  <div class="grid2">
-    <label>KOL<input name="kol" placeholder="谁先发的"></label>
-    <label>群<input name="group_name" placeholder="哪个群"></label>
-  </div>
-  <div class="grid2">
-    <label>原始消息链接<input name="link"></label>
-    <label>发布时间<input name="posted_at" placeholder="2026-05-25T12:00"></label>
-  </div>
-
-  <h2>分析 + 评分</h2>
-  <label>分析结论<textarea name="notes" rows="4"></textarea></label>
-  <label>评分（1-10）<input type="number" name="rating" min="1" max="10"></label>
+  <h2>备注</h2>
+  <label>备注内容<textarea name="notes" rows="4"></textarea></label>
 
   <h2>标签</h2>
   {% if llm_enabled and llm_suggestion %}
@@ -88,7 +76,7 @@
   {% endif %}
   <div class="tag-grid">
     {% for t in tags %}
-    <label class="tag-check"><input type="checkbox" name="tag_ids" value="{{ t.id }}"> {{ t.name }}</label>
+    <label class="tag-check" style="--tag-color: {{ t.color or '#0ea5e9' }}"><input type="checkbox" name="tag_ids" value="{{ t.id }}"> {{ t.name }}</label>
     {% endfor %}
   </div>
   <label>新增标签（逗号分隔）<input name="new_tags" placeholder="例：meme, solana, new-launch"></label>

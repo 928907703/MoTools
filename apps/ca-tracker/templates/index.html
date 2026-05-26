@@ -28,26 +28,33 @@
   {%- endif -%}
 {%- endmacro %}
 
+{% macro fmt_price(v) -%}
+  {%- if v is none -%}—
+  {%- elif v >= 1 -%}${{ '%.4f'|format(v) }}
+  {%- elif v >= 0.01 -%}${{ '%.6f'|format(v) }}
+  {%- else -%}${{ '%.8f'|format(v) }}
+  {%- endif -%}
+{%- endmacro %}
+
 {% block content %}
-<section class="filters">
-  <form method="get" action="{{ prefix or '/' }}">
-    <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号">
-    <select name="chain">
+<section class="toolbar">
+  <form method="get" action="{{ prefix or '/' }}" class="filters auto-filter">
+    <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号" autocomplete="off">
+    <select name="chain" aria-label="链筛选">
       <option value="">所有链</option>
       {% for c in chains %}
         <option value="{{ c }}" {% if c == chain %}selected{% endif %}>{{ c }}</option>
       {% endfor %}
     </select>
-    <select name="tag_id">
+    <select name="tag_id" aria-label="标签筛选">
       <option value="">所有标签</option>
       {% for t in tags %}
         <option value="{{ t.id }}" {% if tag_id == t.id %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
     </select>
-    <input type="number" name="min_rating" value="{{ min_rating or '' }}" placeholder="最低评分" min="1" max="10" style="width:7em">
-    <button type="submit">筛选</button>
     <a href="{{ prefix or '/' }}" class="btn-ghost">重置</a>
   </form>
+  <span class="toolbar-status">自动更新中</span>
 </section>
 
 <table class="tokens dense">
@@ -55,11 +62,10 @@
     <tr>
       <th class="col-token">币种</th>
       <th class="num">创建</th>
-      <th class="num">市值 / 流动</th>
+      <th class="num">MC / FDV / 流动</th>
       <th class="num">价格</th>
       <th class="num">1h</th>
       <th class="num">24h</th>
-      <th class="num">评分</th>
       <th>标签</th>
     </tr>
   </thead>
@@ -91,24 +97,26 @@
       </td>
       <td class="num mc-cell">
         <div class="mc-value {{ mc_tier(ls.market_cap if ls else none) }}">
-          {{ fmt_money(ls.market_cap if ls else none) }}
+          MC {{ fmt_money(ls.market_cap if ls else none) }}
         </div>
-        <div class="mc-liq">{{ fmt_money(ls.liquidity_usd if ls else none) }}</div>
+        <div class="mc-fdv">FDV {{ fmt_money(ls.fdv if ls else none) }}</div>
+        <div class="mc-liq">Liq {{ fmt_money(ls.liquidity_usd if ls else none) }}</div>
       </td>
       <td class="num price">
         {%- if ls and ls.price_usd -%}
-          ${{ '%.6g'|format(ls.price_usd) }}
+          {{ fmt_price(ls.price_usd) }}
         {%- else -%}—{%- endif -%}
       </td>
       <td class="num change">{{ change_pct(t.change_1h) }}</td>
       <td class="num change">{{ change_pct(t.change_24h) }}</td>
-      <td class="num">{% if t.rating %}<span class="rating">{{ t.rating }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td>
-        {% for tag in t.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}
+        <div class="tag-list">
+          {% for tag in t.tags %}<span class="tag" style="--tag-color: {{ tag.color or '#0ea5e9' }}">{{ tag.name }}</span>{% endfor %}
+        </div>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="8" class="empty">还没有 CA。<a href="{{ prefix }}/new">录入第一个</a>。</td></tr>
+    <tr><td colspan="7" class="empty">还没有 CA。<a href="{{ prefix }}/new">录入第一个</a>。</td></tr>
     {% endfor %}
   </tbody>
 </table>

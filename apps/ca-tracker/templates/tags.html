@@ -3,25 +3,30 @@
 {% block content %}
 <h1>标签管理</h1>
 
-<form method="post" action="{{ prefix }}/tags" class="inline-form">
-  <input name="name" required placeholder="标签名（如 meme / L2 / suspicious）">
-  <input name="category" placeholder="分类（赛道/类型/状态）">
-  <button type="submit">新增</button>
+<form method="post" action="{{ prefix }}/tags" class="tag-create-form">
+  <input name="name" required placeholder="标签名">
+  <input name="category" placeholder="分类">
+  <label class="color-field"><span>颜色</span><input type="color" name="color" value="#0ea5e9"></label>
+  <button type="submit" class="primary">新增</button>
 </form>
 
-<table class="tokens">
-  <thead><tr><th>名称</th><th>分类</th><th>操作</th></tr></thead>
+<table class="tokens tag-table">
+  <thead><tr><th>预览</th><th>名称</th><th>分类</th><th>颜色</th><th>操作</th></tr></thead>
   <tbody>
     {% for t in tags %}
     <tr>
+      <td><span class="tag" style="--tag-color: {{ t.color or '#0ea5e9' }}">{{ t.name }}</span></td>
       <td>
-        <form method="post" action="{{ prefix }}/tags/{{ t.id }}/update" class="inline-form" id="tag-{{ t.id }}">
-          <input name="name" value="{{ t.name }}">
+        <input form="tag-update-{{ t.id }}" name="name" value="{{ t.name }}" required>
       </td>
       <td>
-          <input name="category" value="{{ t.category or '' }}">
+        <input form="tag-update-{{ t.id }}" name="category" value="{{ t.category or '' }}">
       </td>
       <td>
+        <input form="tag-update-{{ t.id }}" type="color" name="color" value="{{ t.color or '#0ea5e9' }}" class="color-input">
+      </td>
+      <td class="tag-actions">
+        <form id="tag-update-{{ t.id }}" method="post" action="{{ prefix }}/tags/{{ t.id }}/update" class="inline-form">
           <button type="submit">保存</button>
         </form>
         <form method="post" action="{{ prefix }}/tags/{{ t.id }}/delete" class="inline-form" onsubmit="return confirm('确定删除？');">
@@ -30,7 +35,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="3" class="empty">还没有标签</td></tr>
+    <tr><td colspan="5" class="empty">还没有标签</td></tr>
     {% endfor %}
   </tbody>
 </table>

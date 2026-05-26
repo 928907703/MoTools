@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}登录 · CA Tracker{% endblock %}
+{% block content %}
+<section class="login-panel">
+  <h1>登录 CA Tracker</h1>
+  <p class="muted">登录后只能查看和管理你自己的 CA 数据。</p>
+  {% if error %}
+  <div class="warn">用户名或密码不正确。</div>
+  {% endif %}
+  <form method="post" action="{{ prefix }}/login" class="login-form">
+    <label>用户名<input name="username" autocomplete="username" required></label>
+    <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary" type="submit">登录</button>
+  </form>
+  <p class="auth-alt"><a href="{{ prefix }}/register">没有账号，注册一个</a></p>
+</section>
+{% endblock %}
