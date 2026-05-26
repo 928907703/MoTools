@@ -3,34 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Moshimo Tools</title>
+  <title>MoTools</title>
   <link rel="stylesheet" href="/assets/portal.css">
 </head>
 <body>
-  <header class="hero">
-    <p class="eyebrow">Moshimo Tools</p>
-    <h1>个人工具集</h1>
-    <p class="sub">把常用的信息抓取、分析和管理工具放在一个入口里。</p>
-  </header>
+  <nav class="top-shell" aria-label="全局导航">
+    <a class="brand" href="/">MoTools</a>
+    <div class="nav-links">
+      <a href="/news/">AI News</a>
+      <a href="/ca/">CA Tracker</a>
+    </div>
+  </nav>
 
-  <main class="tools">
-    <a class="tool tool-news" href="/news/">
-      <span class="mark">AI</span>
-      <span>
-        <strong>AI News Hub</strong>
-        <small>AI 行业新闻聚合与分类</small>
-      </span>
-      <span class="open">打开</span>
-    </a>
+  <main class="layout">
+    <section class="intro">
+      <p class="eyebrow">Workspace</p>
+      <h1>工具集控制台</h1>
+      <p class="sub">统一入口管理你的信息流、链上观察和后续自动化工具。</p>
+    </section>
 
-    <a class="tool tool-ca" href="/ca/">
-      <span class="mark">CA</span>
-      <span>
-        <strong>CA Tracker</strong>
-        <small>合约地址、链上快照和标签管理</small>
-      </span>
-      <span class="open">打开</span>
-    </a>
+    <section class="tool-grid" aria-label="工具列表">
+      <a class="tool-card" href="/news/">
+        <span class="icon news">AI</span>
+        <span class="content">
+          <strong>AI News Hub</strong>
+          <small>抓取 AI 行业新闻，分类展示重点动态。</small>
+        </span>
+        <span class="status">运行中</span>
+      </a>
+
+      <a class="tool-card" href="/ca/">
+        <span class="icon ca">CA</span>
+        <span class="content">
+          <strong>CA Tracker</strong>
+          <small>记录合约地址、来源、标签和链上快照。</small>
+        </span>
+        <span class="status">运行中</span>
+      </a>
+    </section>
   </main>
 </body>
 </html>
