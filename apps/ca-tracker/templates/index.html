@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import social_links, change_pct %}
-{% block title %}所有 CA · CA Tracker{% endblock %}
+{% block title %}All CA ? CA Tracker{% endblock %}
 
 {% macro logo(image_url, symbol, name, size='sm') -%}
   {% set seed = (symbol or name or '?')[:1]|upper %}
@@ -21,7 +21,7 @@
 {%- endmacro %}
 
 {% macro fmt_money(v) -%}
-  {%- if v is none -%}—
+  {%- if v is none -%}?
   {%- elif v >= 1000000 -%}${{ '%.2f'|format(v / 1000000) }}M
   {%- elif v >= 1000 -%}${{ '%.1f'|format(v / 1000) }}K
   {%- else -%}${{ '%.2f'|format(v) }}
@@ -29,7 +29,7 @@
 {%- endmacro %}
 
 {% macro fmt_price(v) -%}
-  {%- if v is none -%}—
+  {%- if v is none -%}?
   {%- elif v >= 1 -%}${{ '%.4f'|format(v) }}
   {%- elif v >= 0.01 -%}${{ '%.6f'|format(v) }}
   {%- else -%}${{ '%.8f'|format(v) }}
@@ -39,34 +39,88 @@
 {% block content %}
 <section class="toolbar">
   <form method="get" action="{{ prefix or '/' }}" class="filters auto-filter">
-    <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号" autocomplete="off">
-    <select name="chain" aria-label="链筛选">
-      <option value="">所有链</option>
+    <input type="search" name="q" value="{{ q }}" placeholder="Search address/name/symbol" autocomplete="off">
+    <select name="view" aria-label="View mode">
+      <option value="list" {% if view != 'columns' %}selected{% endif %}>List</option>
+      <option value="columns" {% if view == 'columns' %}selected{% endif %}>Tag Columns</option>
+    </select>
+    <select name="chain" aria-label="Chain filter">
+      <option value="">All Chains</option>
       {% for c in chains %}
         <option value="{{ c }}" {% if c == chain %}selected{% endif %}>{{ c }}</option>
       {% endfor %}
     </select>
-    <select name="tag_id" aria-label="标签筛选">
-      <option value="">所有标签</option>
+    <select name="tag_id" aria-label="Tag filter">
+      <option value="">All Tags</option>
       {% for t in tags %}
         <option value="{{ t.id }}" {% if tag_id == t.id %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
     </select>
-    <a href="{{ prefix or '/' }}" class="btn-ghost">重置</a>
+    <a href="{{ prefix or '/' }}" class="btn-ghost">Reset</a>
+    {% if view == 'columns' %}
+    <div class="column-picker" aria-label="Choose tag columns">
+      {% for t in tags %}
+      <label class="tag-check compact" style="--tag-color: {{ t.color or '#0ea5e9' }}">
+        <input type="checkbox" name="columns" value="{{ t.id }}" {% if t.id in selected_column_ids %}checked{% endif %}> {{ t.name }}
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
   </form>
-  <span class="toolbar-status">自动更新中</span>
+  <span class="toolbar-status">Auto updating</span>
 </section>
 
+{% if view == 'columns' %}
+<section class="tag-columns">
+  {% for group in column_groups %}
+  <section class="tag-column">
+    <header class="tag-column-head">
+      <span class="tag" style="--tag-color: {{ group.tag.color or '#0ea5e9' }}">{{ group.tag.name }}</span>
+      <span class="muted">{{ group.tokens|length }}</span>
+    </header>
+    <div class="tag-column-list">
+      {% for t in group.tokens %}
+      {% set ls = t.latest_snapshot %}
+      <article class="column-token">
+        <a href="{{ prefix }}/token/{{ t.id }}" class="token-cell">
+          {{ logo(t.image_url, t.symbol, t.name, 'sm') }}
+          <span class="token-cell-text">
+            <span class="token-cell-name">{{ t.name or t.symbol or '?' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}</span>
+            <span class="token-cell-meta">
+              <span class="chain-badge">{{ t.chain }}</span>
+              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
+              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="Copy address" aria-label="Copy address">
+                <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
+              </button>
+            </span>
+          </span>
+        </a>
+        <div class="column-token-stats">
+          <span class="{{ mc_tier(ls.market_cap if ls else none) }}">MC {{ fmt_money(ls.market_cap if ls else none) }}</span>
+          <span>{{ fmt_price(ls.price_usd if ls else none) }}</span>
+          <span>{{ change_pct(t.change_1h) }}</span>
+        </div>
+      </article>
+      {% else %}
+      <p class="empty">Copy addressCopy address CA</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <p class="empty">Copy addressCopy addressCopy addressCopy addressCopy addressCopy address</p>
+  {% endfor %}
+</section>
+{% else %}
 <table class="tokens dense">
   <thead>
     <tr>
-      <th class="col-token">币种</th>
-      <th class="num">创建</th>
-      <th class="num">MC / FDV / 流动</th>
-      <th class="num">价格</th>
+      <th class="col-token">Tags</th>
+      <th class="num">Tags</th>
+      <th class="num">MC / FDV / Tags</th>
+      <th class="num">Tags</th>
       <th class="num">1h</th>
       <th class="num">24h</th>
-      <th>标签</th>
+      <th>Tags</th>
     </tr>
   </thead>
   <tbody>
@@ -78,12 +132,12 @@
           {{ logo(t.image_url, t.symbol, t.name, 'sm') }}
           <span class="token-cell-text">
             <span class="token-cell-name">
-              {{ t.name or t.symbol or '—' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}
+              {{ t.name or t.symbol or '?' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}
             </span>
             <span class="token-cell-meta">
               <span class="chain-badge">{{ t.chain }}</span>
-              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}…{{ t.address[-4:] }}</span>
-              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
+              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}?{{ t.address[-4:] }}</span>
+              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="Copy address" aria-label="Copy address">
                 <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
               </button>
             </span>
@@ -93,7 +147,7 @@
       </td>
       <td class="num muted">
         {%- set age = t.pair_created_at|age_days -%}
-        {%- if age is not none -%}{{ age }}d{%- else -%}—{%- endif -%}
+        {%- if age is not none -%}{{ age }}d{%- else -%}?{%- endif -%}
       </td>
       <td class="num mc-cell">
         <div class="mc-value {{ mc_tier(ls.market_cap if ls else none) }}">
@@ -105,7 +159,7 @@
       <td class="num price">
         {%- if ls and ls.price_usd -%}
           {{ fmt_price(ls.price_usd) }}
-        {%- else -%}—{%- endif -%}
+        {%- else -%}?{%- endif -%}
       </td>
       <td class="num change">{{ change_pct(t.change_1h) }}</td>
       <td class="num change">{{ change_pct(t.change_24h) }}</td>
@@ -116,8 +170,9 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="empty">还没有 CA。<a href="{{ prefix }}/new">录入第一个</a>。</td></tr>
+    <tr><td colspan="7" class="empty">Tags? CA?<a href="{{ prefix }}/new">Copy address?</a>?</td></tr>
     {% endfor %}
   </tbody>
 </table>
+{% endif %}
 {% endblock %}

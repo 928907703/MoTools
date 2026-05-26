@@ -282,6 +282,8 @@ async def index(
     q: Optional[str] = None,
     chain: Optional[str] = None,
     tag_id: Optional[str] = None,
+    view: str = "list",
+    columns: Optional[list[str]] = Query(default=None),
     refreshed: Optional[str] = None,
 ):
     user = await _require_user(request)
@@ -297,6 +299,17 @@ async def index(
         )
         tags = await db.list_tags(conn, user["id"])
         chains = await db.distinct_chains(conn, user["id"])
+        column_ids = [_parse_int(v) for v in (columns or [])]
+        column_ids = [v for v in column_ids if v]
+        if view == "columns" and not column_ids:
+            column_ids = [t["id"] for t in tags]
+        column_tags = [t for t in tags if t["id"] in set(column_ids)]
+        column_groups = []
+        for tag in column_tags:
+            column_groups.append({
+                "tag": tag,
+                "tokens": [token for token in tokens if any(tt["id"] == tag["id"] for tt in token["tags"])],
+            })
     finally:
         await conn.close()
     return templates.TemplateResponse(
@@ -310,6 +323,9 @@ async def index(
             q=q or "",
             chain=chain or "",
             tag_id=tag_id_int,
+            view=("columns" if view == "columns" else "list"),
+            selected_column_ids=set(column_ids),
+            column_groups=column_groups,
             refreshed=_parse_int(refreshed),
             llm_enabled=llm.is_enabled(),
             user=user,
