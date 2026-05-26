@@ -1,0 +1,40 @@
+services:
+  news:
+    build:
+      context: ./apps/news
+    container_name: motools-news
+    restart: unless-stopped
+    env_file:
+      - ./apps/news/.env
+    environment:
+      DB_PATH: /app/data/news.db
+      PORT: 8000
+    volumes:
+      - ./data/news:/app/data
+    ports:
+      - "8000:8000"
+
+  ca-tracker:
+    build:
+      context: ./apps/ca-tracker
+    container_name: motools-ca-tracker
+    restart: unless-stopped
+    env_file:
+      - ./apps/ca-tracker/.env
+    environment:
+      PORT: 8001
+    volumes:
+      - ./data/ca-tracker:/app/data
+    ports:
+      - "8001:8001"
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: motools-caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./portal/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./portal/site:/srv:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config

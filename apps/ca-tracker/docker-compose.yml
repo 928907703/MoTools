@@ -1,0 +1,13 @@
+services:
+  ca-tracker:
+    build: .
+    container_name: ca-tracker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data

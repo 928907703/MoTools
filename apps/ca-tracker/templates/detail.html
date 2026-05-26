@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "_macros.html" import social_links, change_pct %}
+{% block title %}{{ token.name or token.address[:10] }} · CA Tracker{% endblock %}
+{% block content %}
+{% set seed = (token.symbol or token.name or '?')[:1]|upper %}
+{% set socials = token.socials_json|socials %}
+<div class="detail-header">
+  {% if token.image_url %}
+    <img class="logo logo-lg" src="{{ token.image_url }}" alt=""
+         onerror="this.outerHTML='<div class=&quot;logo logo-lg logo-fallback&quot;>{{ seed }}</div>'">
+  {% else %}
+    <div class="logo logo-lg logo-fallback">{{ seed }}</div>
+  {% endif %}
+  <div>
+    <h1 style="margin:0">{{ token.name or '—' }} {% if token.symbol %}<span class="symbol">${{ token.symbol }}</span>{% endif %}</h1>
+    <p class="muted" style="margin:0.25rem 0 0">
+      {{ token.chain }} ·
+      <code>{{ token.address }}</code>
+      <button type="button" class="copy-btn" data-copy="{{ token.address }}" title="复制地址" aria-label="复制地址">
+        <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
+      </button>
+      {% set age = token.pair_created_at|age_days %}
+      {% if age is not none %} · 上线 {{ age }}d{% endif %}
+    </p>
+    <p style="margin:0.35rem 0 0; font-size: 0.9rem;">
+      1h {{ change_pct(token.change_1h) }} · 24h {{ change_pct(token.change_24h) }}
+    </p>
+    {{ social_links(socials) }}
+  </div>
+</div>
+
+<section class="card">
+  <h2>编辑</h2>
+  <form method="post" action="{{ prefix }}/token/{{ token.id }}/edit">
+    <div class="grid2">
+      <label>名称<input name="name" value="{{ token.name or '' }}"></label>
+      <label>符号<input name="symbol" value="{{ token.symbol or '' }}"></label>
+    </div>
+    <label>分析结论<textarea name="notes" rows="4">{{ token.notes or '' }}</textarea></label>
+    <div class="grid2">
+      <label>评分 (1-10)<input type="number" name="rating" min="1" max="10" value="{{ token.rating or '' }}"></label>
+      <label>首次出现<input name="first_seen_at" value="{{ token.first_seen_at or '' }}"></label>
+    </div>
+    <h3>标签</h3>
+    <div class="tag-grid">
+      {% for t in all_tags %}
+      <label class="tag-check">
+        <input type="checkbox" name="tag_ids" value="{{ t.id }}" {% if t.id in selected_tag_ids %}checked{% endif %}> {{ t.name }}
+      </label>
+      {% endfor %}
+    </div>
+    <label>新增标签（逗号分隔）<input name="new_tags"></label>
+    <button type="submit" class="primary">保存</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>链上快照</h2>
+  <form method="post" action="{{ prefix }}/token/{{ token.id }}/snapshot" style="display:inline">
+    <button type="submit">重新抓快照</button>
+  </form>
+  <table>
+    <thead><tr><th>阶段</th><th>时间</th><th>价格</th><th>市值</th><th>FDV</th><th>流动性</th></tr></thead>
+    <tbody>
+      {# snapshots 按时间 DESC：[0] 是最新，[-1] 是最早 #}
+      {% set newest = snapshots[0] if snapshots else None %}
+      {% set oldest = snapshots[-1] if snapshots and snapshots|length > 1 else None %}
+      {% for label, s in [('首次', oldest), ('最新', newest)] if s %}
+      <tr>
+        <td><strong>{{ label }}</strong></td>
+        <td class="muted">{{ s.snapshot_at[:19].replace('T',' ') }}</td>
+        <td>{% if s.price_usd %}${{ '%.8f' % s.price_usd }}{% endif %}</td>
+        <td>{% if s.market_cap %}${{ '{:,.0f}'.format(s.market_cap) }}{% endif %}</td>
+        <td>{% if s.fdv %}${{ '{:,.0f}'.format(s.fdv) }}{% endif %}</td>
+        <td>{% if s.liquidity_usd %}${{ '{:,.0f}'.format(s.liquidity_usd) }}{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">还没有快照</td></tr>
+      {% endfor %}
+      {% if snapshots and snapshots|length > 2 %}
+      <tr>
+        <td colspan="6" class="muted" style="text-align:center; font-size:0.85rem;">
+          中间还有 {{ snapshots|length - 2 }} 条快照
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>来源</h2>
+  <form method="post" action="{{ prefix }}/token/{{ token.id }}/source" class="inline-form">
+    <input name="kol" placeholder="KOL">
+    <input name="group_name" placeholder="群">
+    <input name="link" placeholder="链接">
+    <input name="posted_at" placeholder="时间">
+    <button type="submit">追加</button>
+  </form>
+  <ul>
+    {% for s in sources %}
+    <li>
+      <strong>{{ s.kol or '?' }}</strong>
+      {% if s.group_name %} @ {{ s.group_name }}{% endif %}
+      <span class="muted">{{ (s.posted_at or '')[:16].replace('T',' ') }}</span>
+      {% if s.link %} · <a href="{{ s.link }}" target="_blank">原文</a>{% endif %}
+    </li>
+    {% else %}
+    <li class="empty">还没有来源</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card danger">
+  <form method="post" action="{{ prefix }}/token/{{ token.id }}/delete" onsubmit="return confirm('确定删除这个 CA?');">
+    <button type="submit" class="danger">删除</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,27 @@
+{# 渲染一组社交链接（list of {type, url}）。type 找不到对应 sprite 时回退到 i-link。 #}
+{% macro social_links(items) -%}
+  {% if items %}
+    <span class="socials">
+      {% for s in items %}
+        {% set t = (s.type or 'link')|lower %}
+        {% set icon = 'i-' ~ (t if t in ['twitter','x','telegram','discord','website','github','medium','reddit','youtube'] else 'link') %}
+        <a href="{{ s.url }}" target="_blank" rel="noopener" title="{{ s.type or s.url }}">
+          <svg class="i" aria-hidden="true"><use href="#{{ icon }}"/></svg>
+        </a>
+      {% endfor %}
+    </span>
+  {% endif %}
+{%- endmacro %}
+
+{# 渲染百分比涨跌：正数绿、负数红、空灰色 dash。 #}
+{% macro change_pct(value) -%}
+  {% if value is none %}
+    <span class="change-flat">—</span>
+  {% elif value > 0 %}
+    <span class="change-up">+{{ '%.1f' % value }}%</span>
+  {% elif value < 0 %}
+    <span class="change-down">{{ '%.1f' % value }}%</span>
+  {% else %}
+    <span class="change-flat">0%</span>
+  {% endif %}
+{%- endmacro %}

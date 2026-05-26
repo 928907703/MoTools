@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import social_links %}
+{% block title %}录入 CA · CA Tracker{% endblock %}
+{% block content %}
+<h1>录入 CA</h1>
+
+<form method="post" action="{{ prefix }}/new/lookup" class="lookup">
+  <label>合约地址
+    <input type="text" name="address" value="{{ address }}" required placeholder="0x... 或 Solana 地址">
+  </label>
+  <label>链（可选，留空自动判定）
+    <select name="chain">
+      <option value="" {% if not chain %}selected{% endif %}>自动</option>
+      {% for c in ['sol','eth','bsc','base','arb','polygon'] %}
+        <option value="{{ c }}" {% if chain == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">抓取 + 查重</button>
+</form>
+
+{% if duplicate %}
+<div class="warn">
+  ⚠️ 已见过这个 CA。<a href="{{ prefix }}/token/{{ duplicate.id }}">查看详情</a>
+  {% if duplicate.rating %}（上次评分 {{ duplicate.rating }}）{% endif %}
+</div>
+{% endif %}
+
+{% if prefill %}
+<form method="post" action="{{ prefix }}/new" class="card">
+  <input type="hidden" name="address" value="{{ address }}">
+  <input type="hidden" name="chain" value="{{ chain }}">
+  <input type="hidden" name="price_usd" value="{{ prefill.price_usd or '' }}">
+  <input type="hidden" name="market_cap" value="{{ prefill.market_cap or '' }}">
+  <input type="hidden" name="fdv" value="{{ prefill.fdv or '' }}">
+  <input type="hidden" name="liquidity_usd" value="{{ prefill.liquidity_usd or '' }}">
+  <input type="hidden" name="image_url" value="{{ prefill.image_url or '' }}">
+  <input type="hidden" name="socials_json" value='{{ (prefill.socials or [])|tojson }}'>
+  <input type="hidden" name="pair_created_at" value="{{ prefill.pair_created_at or '' }}">
+
+  <div class="prefill-header">
+    {% set seed = (prefill.symbol or prefill.name or '?')[:1]|upper %}
+    {% if prefill.image_url %}
+      <img class="logo logo-lg" src="{{ prefill.image_url }}" alt=""
+           onerror="this.outerHTML='<div class=&quot;logo logo-lg logo-fallback&quot;>{{ seed }}</div>'">
+    {% else %}
+      <div class="logo logo-lg logo-fallback">{{ seed }}</div>
+    {% endif %}
+    <div>
+      <h2 style="margin:0">基础信息（来自 DexScreener，可编辑）</h2>
+      {{ social_links(prefill.socials) }}
+    </div>
+  </div>
+  <div class="grid2">
+    <label>名称<input name="name" value="{{ prefill.name or '' }}"></label>
+    <label>符号<input name="symbol" value="{{ prefill.symbol or '' }}"></label>
+  </div>
+  <p class="muted">
+    {% if prefill.price_usd %}价格 ${{ '%.6f' % prefill.price_usd }}{% endif %}
+    {% if prefill.market_cap %} · 市值 ${{ '{:,.0f}'.format(prefill.market_cap) }}{% endif %}
+    {% if prefill.liquidity_usd %} · 流动性 ${{ '{:,.0f}'.format(prefill.liquidity_usd) }}{% endif %}
+    {% set age = prefill.pair_created_at|age_days %}
+    {% if age is not none %} · 上线 {{ age }}d{% endif %}
+    {% if prefill.pair_url %} · <a href="{{ prefill.pair_url }}" target="_blank">DexScreener</a>{% endif %}
+  </p>
+
+  <h2>来源</h2>
+  <div class="grid2">
+    <label>KOL<input name="kol" placeholder="谁先发的"></label>
+    <label>群<input name="group_name" placeholder="哪个群"></label>
+  </div>
+  <div class="grid2">
+    <label>原始消息链接<input name="link"></label>
+    <label>发布时间<input name="posted_at" placeholder="2026-05-25T12:00"></label>
+  </div>
+
+  <h2>分析 + 评分</h2>
+  <label>分析结论<textarea name="notes" rows="4"></textarea></label>
+  <label>评分（1-10）<input type="number" name="rating" min="1" max="10"></label>
+
+  <h2>标签</h2>
+  {% if llm_enabled and llm_suggestion %}
+  <div class="suggestion">
+    <strong>🤖 LLM 建议：</strong>
+    {% for t in llm_suggestion.tags %}<span class="tag">{{ t }}</span>{% endfor %}
+    <div class="muted">{{ llm_suggestion.reason }}</div>
+  </div>
+  {% endif %}
+  <div class="tag-grid">
+    {% for t in tags %}
+    <label class="tag-check"><input type="checkbox" name="tag_ids" value="{{ t.id }}"> {{ t.name }}</label>
+    {% endfor %}
+  </div>
+  <label>新增标签（逗号分隔）<input name="new_tags" placeholder="例：meme, solana, new-launch"></label>
+
+  <div class="actions">
+    <button type="submit" class="primary">保存</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

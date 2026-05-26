@@ -1,0 +1,20 @@
+moshimo.fun, www.moshimo.fun {
+    encode zstd gzip
+
+    handle_path /news* {
+        reverse_proxy 127.0.0.1:8000 {
+            header_up X-Forwarded-Prefix /news
+        }
+    }
+
+    handle_path /ca* {
+        reverse_proxy 127.0.0.1:8001 {
+            header_up X-Forwarded-Prefix /ca
+        }
+    }
+
+    handle {
+        root * /srv
+        file_server
+    }
+}

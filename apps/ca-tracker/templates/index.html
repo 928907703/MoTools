@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from "_macros.html" import social_links, change_pct %}
+{% block title %}所有 CA · CA Tracker{% endblock %}
+
+{% macro logo(image_url, symbol, name, size='sm') -%}
+  {% set seed = (symbol or name or '?')[:1]|upper %}
+  {% if image_url %}
+    <img class="logo logo-{{ size }}" src="{{ image_url }}" alt="{{ symbol or name or '' }}"
+         onerror="this.outerHTML='<div class=&quot;logo logo-{{ size }} logo-fallback&quot;>{{ seed }}</div>'">
+  {% else %}
+    <div class="logo logo-{{ size }} logo-fallback">{{ seed }}</div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro mc_tier(mc) -%}
+  {%- if mc is none -%}mc-na
+  {%- elif mc >= 1000000 -%}mc-large
+  {%- elif mc >= 100000 -%}mc-mid
+  {%- else -%}mc-small
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_money(v) -%}
+  {%- if v is none -%}—
+  {%- elif v >= 1000000 -%}${{ '%.2f'|format(v / 1000000) }}M
+  {%- elif v >= 1000 -%}${{ '%.1f'|format(v / 1000) }}K
+  {%- else -%}${{ '%.2f'|format(v) }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<section class="filters">
+  <form method="get" action="{{ prefix or '/' }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="搜索地址/名称/符号">
+    <select name="chain">
+      <option value="">所有链</option>
+      {% for c in chains %}
+        <option value="{{ c }}" {% if c == chain %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <select name="tag_id">
+      <option value="">所有标签</option>
+      {% for t in tags %}
+        <option value="{{ t.id }}" {% if tag_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="min_rating" value="{{ min_rating or '' }}" placeholder="最低评分" min="1" max="10" style="width:7em">
+    <button type="submit">筛选</button>
+    <a href="{{ prefix or '/' }}" class="btn-ghost">重置</a>
+  </form>
+</section>
+
+<table class="tokens dense">
+  <thead>
+    <tr>
+      <th class="col-token">币种</th>
+      <th class="num">创建</th>
+      <th class="num">市值 / 流动</th>
+      <th class="num">价格</th>
+      <th class="num">1h</th>
+      <th class="num">24h</th>
+      <th class="num">评分</th>
+      <th>标签</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in tokens %}
+    {% set ls = t.latest_snapshot %}
+    <tr>
+      <td class="col-token">
+        <a href="{{ prefix }}/token/{{ t.id }}" class="token-cell">
+          {{ logo(t.image_url, t.symbol, t.name, 'sm') }}
+          <span class="token-cell-text">
+            <span class="token-cell-name">
+              {{ t.name or t.symbol or '—' }}{% if t.symbol %} <span class="symbol">${{ t.symbol }}</span>{% endif %}
+            </span>
+            <span class="token-cell-meta">
+              <span class="chain-badge">{{ t.chain }}</span>
+              <span class="addr" title="{{ t.address }}">{{ t.address[:4] }}…{{ t.address[-4:] }}</span>
+              <button type="button" class="copy-btn" data-copy="{{ t.address }}" title="复制地址" aria-label="复制地址">
+                <svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>
+              </button>
+            </span>
+          </span>
+        </a>
+        {{ social_links(t.socials_json|socials) }}
+      </td>
+      <td class="num muted">
+        {%- set age = t.pair_created_at|age_days -%}
+        {%- if age is not none -%}{{ age }}d{%- else -%}—{%- endif -%}
+      </td>
+      <td class="num mc-cell">
+        <div class="mc-value {{ mc_tier(ls.market_cap if ls else none) }}">
+          {{ fmt_money(ls.market_cap if ls else none) }}
+        </div>
+        <div class="mc-liq">{{ fmt_money(ls.liquidity_usd if ls else none) }}</div>
+      </td>
+      <td class="num price">
+        {%- if ls and ls.price_usd -%}
+          ${{ '%.6g'|format(ls.price_usd) }}
+        {%- else -%}—{%- endif -%}
+      </td>
+      <td class="num change">{{ change_pct(t.change_1h) }}</td>
+      <td class="num change">{{ change_pct(t.change_24h) }}</td>
+      <td class="num">{% if t.rating %}<span class="rating">{{ t.rating }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>
+        {% for tag in t.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="empty">还没有 CA。<a href="{{ prefix }}/new">录入第一个</a>。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
