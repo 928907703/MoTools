@@ -176,7 +176,7 @@
   <thead>
     <tr>
       <th class="col-token">项目</th>
-      <th class="num">天数</th>
+      <th>备注</th>
       <th class="num">MC / FDV / 流动性</th>
       <th class="num">价格</th>
       <th class="num">1h</th>
@@ -206,9 +206,12 @@
         </a>
         {{ social_links(t.socials_json|socials) }}
       </td>
-      <td class="num muted">
-        {%- set age = t.pair_created_at|age_days -%}
-        {%- if age is not none -%}{{ age }}d{%- else -%}-{%- endif -%}
+      <td class="note-cell">
+        {% if t.notes %}
+          <span title="{{ t.notes }}">{{ t.notes }}</span>
+        {% else %}
+          <span class="muted">-</span>
+        {% endif %}
       </td>
       <td class="num mc-cell">
         <div class="mc-value {{ mc_tier(ls.market_cap if ls else none) }}">

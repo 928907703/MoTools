@@ -643,3 +643,17 @@ body {
   padding: 0.18rem 0.5rem;
   font-size: 0.78rem;
 }
+
+
+.note-cell {
+  max-width: 220px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.note-cell span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
