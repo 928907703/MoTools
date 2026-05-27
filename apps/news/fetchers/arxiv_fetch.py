@@ -45,6 +45,7 @@ class ArxivFetcher(Fetcher):
                     url=result.entry_id,
                     published_at=pub,
                     content=(result.summary or "").strip()[:2000],
+                    channel="ai",
                 ))
         except Exception as e:
             log.warning("[arxiv] fetch failed: %s", e)

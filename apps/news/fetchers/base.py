@@ -15,6 +15,7 @@ class NewsItem:
     url: str
     published_at: datetime
     content: str = ""
+    channel: str = "ai"
 
     def to_row(self) -> dict[str, Any]:
         d = asdict(self)

@@ -21,7 +21,7 @@ def _build_fetchers() -> list[Fetcher]:
     fs: list[Fetcher] = []
     for s in SOURCES:
         if s.kind in ("rss", "hn"):
-            fs.append(RSSFetcher(s.name, s.url, s.source_type, s.keyword_filter))
+            fs.append(RSSFetcher(s.name, s.url, s.source_type, s.keyword_filter, s.channel))
         elif s.kind == "html":
             fs.append(MetaAIFetcher())
         elif s.kind == "arxiv":

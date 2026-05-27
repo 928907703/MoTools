@@ -31,11 +31,12 @@ def _to_dt(struct_time) -> datetime:
 
 class RSSFetcher(Fetcher):
     def __init__(self, name: str, url: str, source_type: str,
-                 keyword_filter: Iterable[str] = ()) -> None:
+                 keyword_filter: Iterable[str] = (), channel: str = "ai") -> None:
         self.name = name
         self.url = url
         self.source_type = source_type
         self.keyword_filter = tuple(k.lower() for k in keyword_filter)
+        self.channel = channel
 
     def _match_keyword(self, text: str) -> bool:
         if not self.keyword_filter:
@@ -78,6 +79,7 @@ class RSSFetcher(Fetcher):
                 url=link,
                 published_at=_to_dt(pub),
                 content=summary[:2000],
+                channel=self.channel,
             ))
         log.info("[%s] fetched %d items", self.name, len(items))
         return items

@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import BackgroundTasks, FastAPI, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from config import CATEGORIES, SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL
+from config import CHANNELS, SOURCE_TYPE_COLOR, SOURCE_TYPE_LABEL
 from db import init_db, query_news, source_counts
 from scheduler import run_fetch_cycle, start_scheduler
 
@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     sched.shutdown(wait=False)
 
 
-app = FastAPI(title="AI News Hub", lifespan=lifespan)
+app = FastAPI(title="News Hub", lifespan=lifespan)
 
 
 def _humanize(iso: str) -> str:
@@ -55,13 +55,23 @@ def _prefix(request: Request) -> str:
     return prefix
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request,
-                hours: int = Query(168, ge=1, le=720),
-                category: str | None = None):
-    rows = await query_news(category=category, hours=hours)
+def _normalize_channel(channel: str | None) -> str:
+    return channel if channel in CHANNELS else "ai"
 
-    grouped: OrderedDict[str, list[dict]] = OrderedDict((c, []) for c in CATEGORIES)
+
+@app.get("/", response_class=HTMLResponse)
+async def index(
+    request: Request,
+    hours: int = Query(168, ge=1, le=720),
+    category: str | None = None,
+    channel: str = Query("ai"),
+):
+    active_channel = _normalize_channel(channel)
+    channel_config = CHANNELS[active_channel]
+    categories = channel_config["categories"]
+    rows = await query_news(channel=active_channel, category=category, hours=hours)
+
+    grouped: OrderedDict[str, list[dict]] = OrderedDict((c, []) for c in categories)
     for r in rows:
         cat = r.get("category") or "其他"
         if cat not in grouped:
@@ -71,10 +81,13 @@ async def index(request: Request,
         r["type_color"] = SOURCE_TYPE_COLOR.get(r["source_type"], "bg-slate-100 text-slate-700")
         grouped[cat].append(r)
 
-    counts = await source_counts()
+    counts = await source_counts(active_channel)
     return templates.TemplateResponse(request, "index.html", {
         "grouped": grouped,
-        "categories": CATEGORIES,
+        "categories": categories,
+        "channels": CHANNELS,
+        "channel": active_channel,
+        "channel_config": channel_config,
         "total": len(rows),
         "hours": hours,
         "active_category": category or "全部",
@@ -84,10 +97,21 @@ async def index(request: Request,
     })
 
 
+@app.get("/ai")
+async def ai_redirect():
+    return RedirectResponse("./?channel=ai", status_code=303)
+
+
+@app.get("/rwa")
+async def rwa_redirect():
+    return RedirectResponse("./?channel=rwa", status_code=303)
+
+
 @app.get("/api/news")
-async def api_news(hours: int = 168, category: str | None = None):
-    rows = await query_news(category=category, hours=hours)
-    return {"total": len(rows), "items": rows}
+async def api_news(hours: int = 168, category: str | None = None, channel: str = "ai"):
+    active_channel = _normalize_channel(channel)
+    rows = await query_news(channel=active_channel, category=category, hours=hours)
+    return {"channel": active_channel, "total": len(rows), "items": rows}
 
 
 @app.post("/api/refresh")

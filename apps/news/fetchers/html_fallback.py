@@ -56,6 +56,7 @@ class MetaAIFetcher(Fetcher):
                 url=full,
                 published_at=now,
                 content="",
+                channel="ai",
             ))
             if len(items) >= 20:
                 break

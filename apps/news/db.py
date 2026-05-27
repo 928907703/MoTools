@@ -12,6 +12,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT NOT NULL UNIQUE,
+    channel TEXT NOT NULL DEFAULT 'ai',
     source TEXT NOT NULL,
     source_type TEXT NOT NULL,
     title TEXT NOT NULL,
@@ -36,6 +37,11 @@ async def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.executescript(_SCHEMA)
+        try:
+            await conn.execute("ALTER TABLE news_items ADD COLUMN channel TEXT NOT NULL DEFAULT 'ai'")
+        except aiosqlite.OperationalError:
+            pass
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_channel_published ON news_items(channel, published_at DESC)")
         await conn.commit()
 
 
@@ -50,11 +56,11 @@ async def insert_items(items: Iterable[dict[str, Any]]) -> int:
             for it in items:
                 cur = await conn.execute(
                     """INSERT OR IGNORE INTO news_items
-                       (uid, source, source_type, title, url, published_at,
+                       (uid, channel, source, source_type, title, url, published_at,
                         raw_content, summarized, fetched_at)
-                       VALUES (?,?,?,?,?,?,?,0,?)""",
-                    (it["uid"], it["source"], it["source_type"], it["title"],
-                     it["url"], it["published_at"], it.get("content", ""), now),
+                       VALUES (?,?,?,?,?,?,?,?,0,?)""",
+                    (it["uid"], it.get("channel", "ai"), it["source"], it["source_type"],
+                     it["title"], it["url"], it["published_at"], it.get("content", ""), now),
                 )
                 if cur.rowcount > 0:
                     inserted += 1
@@ -66,7 +72,7 @@ async def fetch_pending_summaries(limit: int = 80) -> list[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
-            """SELECT id, source, source_type, title, url, raw_content
+            """SELECT id, channel, source, source_type, title, url, raw_content
                FROM news_items WHERE summarized = 0
                ORDER BY published_at DESC LIMIT ?""",
             (limit,),
@@ -87,12 +93,12 @@ async def update_summary(item_id: int, summary: str, category: str, importance: 
             await conn.commit()
 
 
-async def query_news(category: str | None = None, hours: int = 168) -> list[dict[str, Any]]:
+async def query_news(channel: str = "ai", category: str | None = None, hours: int = 168) -> list[dict[str, Any]]:
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-    sql = ("SELECT id, uid, source, source_type, title, url, published_at, "
+    sql = ("SELECT id, uid, channel, source, source_type, title, url, published_at, "
            "summary, category, importance "
-           "FROM news_items WHERE published_at >= ? ")
-    params: list[Any] = [cutoff]
+           "FROM news_items WHERE channel = ? AND published_at >= ? ")
+    params: list[Any] = [channel, cutoff]
     if category and category != "全部":
         sql += "AND category = ? "
         params.append(category)
@@ -105,9 +111,10 @@ async def query_news(category: str | None = None, hours: int = 168) -> list[dict
         return [dict(r) for r in rows]
 
 
-async def source_counts() -> list[tuple[str, int]]:
+async def source_counts(channel: str = "ai") -> list[tuple[str, int]]:
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
-            "SELECT source, COUNT(*) FROM news_items GROUP BY source ORDER BY 2 DESC"
+            "SELECT source, COUNT(*) FROM news_items WHERE channel = ? GROUP BY source ORDER BY 2 DESC",
+            (channel,),
         )
         return list(await cur.fetchall())
