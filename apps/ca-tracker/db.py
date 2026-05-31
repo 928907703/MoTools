@@ -85,9 +85,11 @@ def now_iso() -> str:
 
 
 async def connect() -> aiosqlite.Connection:
-    db = await aiosqlite.connect(DB_PATH)
+    db = await aiosqlite.connect(DB_PATH, timeout=30)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")
+    await db.execute("PRAGMA busy_timeout = 30000")
+    await db.execute("PRAGMA journal_mode = WAL")
     return db
 
 
@@ -166,6 +168,9 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
             "CREATE INDEX IF NOT EXISTS idx_sources_token ON sources(token_id)",
             "CREATE INDEX IF NOT EXISTS idx_snapshots_token ON snapshots(token_id)",
+            "CREATE INDEX IF NOT EXISTS idx_snapshots_token_time ON snapshots(token_id, snapshot_at DESC, id DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_token_tags_token ON token_tags(token_id)",
+            "CREATE INDEX IF NOT EXISTS idx_token_tags_tag ON token_tags(tag_id)",
         ):
             await db.execute(index_sql)
         await db.commit()
@@ -349,8 +354,8 @@ async def list_tokens(
     params: list[Any] = [user_id]
     where: list[str] = ["t.user_id = ?"]
     if tag_id:
-        sql += " JOIN token_tags tt ON tt.token_id = t.id"
-        where.append("tt.tag_id = ?")
+        sql += " JOIN token_tags tt_filter ON tt_filter.token_id = t.id"
+        where.append("tt_filter.tag_id = ?")
         params.append(tag_id)
     if q:
         where.append("(t.address LIKE ? OR t.name LIKE ? OR t.symbol LIKE ?)")
@@ -365,16 +370,83 @@ async def list_tokens(
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY t.created_at DESC, t.id DESC"
-    cur = await db.execute(sql, params)
-    rows = await cur.fetchall()
-    result: list[dict[str, Any]] = []
-    for r in rows:
-        d = dict(r)
-        d["tags"] = await get_token_tags(db, r["id"])
-        d["latest_snapshot"] = await latest_snapshot(db, r["id"])
-        d["change_1h"] = await market_cap_change(db, r["id"], 1)
-        d["change_24h"] = await market_cap_change(db, r["id"], 24)
-        result.append(d)
+
+    rows = await (await db.execute(sql, params)).fetchall()
+    result = [dict(r) for r in rows]
+    if not result:
+        return []
+
+    token_ids = [r["id"] for r in result]
+    placeholders = ",".join("?" for _ in token_ids)
+
+    tags_by_token: dict[int, list[dict[str, Any]]] = {token_id: [] for token_id in token_ids}
+    tag_rows = await (
+        await db.execute(
+            f"""SELECT tt.token_id, tg.* FROM token_tags tt
+                JOIN tags tg ON tg.id = tt.tag_id
+                WHERE tt.token_id IN ({placeholders})
+                ORDER BY tg.category, tg.name""",
+            token_ids,
+        )
+    ).fetchall()
+    for row in tag_rows:
+        item = dict(row)
+        token_id = item.pop("token_id")
+        tags_by_token.setdefault(token_id, []).append(item)
+
+    latest_by_token: dict[int, dict[str, Any]] = {}
+    latest_rows = await (
+        await db.execute(
+            f"""SELECT s.* FROM snapshots s
+                JOIN (
+                  SELECT token_id, MAX(id) AS max_id
+                  FROM snapshots
+                  WHERE token_id IN ({placeholders})
+                  GROUP BY token_id
+                ) latest ON latest.max_id = s.id""",
+            token_ids,
+        )
+    ).fetchall()
+    for row in latest_rows:
+        item = dict(row)
+        latest_by_token[item["token_id"]] = item
+
+    from datetime import datetime, timedelta, timezone
+
+    async def changes_for(hours: int) -> dict[int, Optional[float]]:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        old_rows = await (
+            await db.execute(
+                f"""SELECT s.* FROM snapshots s
+                    JOIN (
+                      SELECT token_id, MAX(id) AS max_id
+                      FROM snapshots
+                      WHERE token_id IN ({placeholders}) AND snapshot_at <= ?
+                      GROUP BY token_id
+                    ) old ON old.max_id = s.id""",
+                [*token_ids, cutoff],
+            )
+        ).fetchall()
+        old_by_token = {row["token_id"]: dict(row) for row in old_rows}
+        changes: dict[int, Optional[float]] = {}
+        for token_id in token_ids:
+            latest = latest_by_token.get(token_id)
+            old = old_by_token.get(token_id)
+            if not latest or not old or not latest.get("market_cap") or not old.get("market_cap"):
+                changes[token_id] = None
+                continue
+            changes[token_id] = (latest["market_cap"] - old["market_cap"]) / old["market_cap"] * 100
+        return changes
+
+    change_1h = await changes_for(1)
+    change_24h = await changes_for(24)
+
+    for item in result:
+        token_id = item["id"]
+        item["tags"] = tags_by_token.get(token_id, [])
+        item["latest_snapshot"] = latest_by_token.get(token_id)
+        item["change_1h"] = change_1h.get(token_id)
+        item["change_24h"] = change_24h.get(token_id)
     return result
 
 
